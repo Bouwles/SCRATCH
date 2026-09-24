@@ -6,7 +6,7 @@
   "description": "SCRATCH — a billiards roguelite from a lost 1998 disc, with a normal game of 8-ball hidden inside.",
   "author": "Paul Nercessian",
   "license": "UNLICENSED",
-  "homepage": "https://github.com/Bouwles/SCRATCH#readme",
+  "homepage": "https://bouwles.github.io/SCRATCH/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Bouwles/SCRATCH.git"
@@ -32,7 +32,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "site": "node scripts/site.mjs"
   },
   "dependencies": {
     "@fontsource/chakra-petch": "^5.3.0",

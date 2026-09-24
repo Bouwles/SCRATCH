@@ -17,6 +17,10 @@
 </p>
 
 <p align="center">
+  <a href="https://bouwles.github.io/SCRATCH/"><img alt="PLAY in your browser" src="https://img.shields.io/badge/%E2%96%B6%20PLAY-in%20your%20browser-ff2bd6?style=for-the-badge"></a>
+</p>
+
+<p align="center">
   <img src="release/itch/gifs/break.gif" alt="A break with Explosive Chalk and Thunder Cue: the rack detonates, DOUBLE, TRIPLE" width="640">
 </p>
 
@@ -43,6 +47,9 @@ its own code as you play. The project contains no image, audio or model files.
 
 ## Play it
 
+**In your browser:** go to **[bouwles.github.io/SCRATCH](https://bouwles.github.io/SCRATCH/)** and
+click **PLAY**. There's nothing to install.
+
 **From a release.** Download `SCRATCH-web-v1.0.0.zip` from the
 [latest release](https://github.com/Bouwles/SCRATCH/releases/latest) and unzip it.
 Serve the folder with any static server, then open `http://localhost:8000`:
@@ -68,6 +75,10 @@ npm run dev        # http://localhost:5173
 | `npm run dev` | Development server with hot reload. Add `?debug` to the URL for the test hooks. |
 | `npm run build` | Production build in `dist/`, with relative paths throughout |
 | `npm run release` | Builds and checks the release, then packs `release/itch/SCRATCH-web-v1.0.0.zip` for itch.io |
+| `npm run site` | Builds the GitHub Pages site in `_site/`: the landing page, with the game in `play/` |
+
+Every push to `main` rebuilds and deploys the site through GitHub Actions
+(`.github/workflows/deploy.yml`).
 
 It needs a current Chrome, Edge, Firefox or Safari with WebGL 2, and a mouse.
 
@@ -279,8 +290,12 @@ src/
   ui/                   menus, HUD, icons
 public/licenses/        third-party licence texts (shipped in the build)
 scripts/release.mjs     npm run release
+scripts/site.mjs        npm run site (GitHub Pages)
+site/index.html         the landing page
+.github/workflows/      deploys the site to GitHub Pages
 release/itch/           itch.io page copy, upload steps, cover, banners, GIFs
-docs/screenshots/       README images
+docs/screenshots/       screenshots for the README and the site
+docs/media/             video loops for the site
 ```
 
 ## Credits and licences

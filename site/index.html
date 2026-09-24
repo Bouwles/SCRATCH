@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SCRATCH: a billiards roguelite you play in your browser</title>
+  <meta name="description" content="Pool was normal until the table started fighting back. A PS1-style billiards roguelite, with a completely normal game of 8-ball hidden inside. Free, in your browser.">
+  <meta name="theme-color" content="#07050f">
+  <link rel="icon" href="media/icon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="SCRATCH">
+  <meta property="og:description" content="Pool was normal until the table started fighting back. A PS1-style billiards roguelite you play in your browser.">
+  <meta property="og:url" content="https://bouwles.github.io/SCRATCH/">
+  <meta property="og:image" content="https://bouwles.github.io/SCRATCH/media/banner.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <style>
+    @font-face { font-family: 'Dela'; src: url('media/fonts/dela-gothic-one.woff2') format('woff2'); font-display: swap; }
+    @font-face { font-family: 'PS2P'; src: url('media/fonts/press-start-2p.woff2') format('woff2'); font-display: swap; }
+    :root {
+      --bg: #07050f; --panel: #110b22; --line: #2a1d4a; --ink: #d8d4f0; --dim: #8f88b3;
+      --hot: #ff2bd6; --cyan: #2bf0ff; --gold: #ffc21c; --violet: #7c5cff;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--bg); color: var(--ink); font: 17px/1.6 var(--sans); }
+    body { margin: 0; background:
+      radial-gradient(ellipse 80% 50% at 50% 0%, #1d1038 0%, transparent 70%),
+      var(--bg); }
+    body::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 10;
+      background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0 1px, transparent 1px 3px); }
+    a { color: var(--cyan); }
+    a:focus-visible, .play:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+    .px { font-family: 'PS2P', monospace; letter-spacing: 0.08em; }
+
+    header { padding: 28px 0 8px; text-align: center; }
+    .banner { display: block; width: 100%; height: auto; border: 1px solid var(--line); box-shadow: 0 0 60px rgba(124, 92, 255, 0.18); }
+    .tagline { font-family: 'Dela', var(--sans); font-size: clamp(22px, 3.4vw, 34px); line-height: 1.25; margin: 28px 0 6px; transform: skewX(-6deg); color: #f2eeff; text-shadow: 3px 3px 0 #000; }
+    .sub { color: var(--dim); margin: 0 0 26px; }
+
+    .play { display: inline-flex; align-items: center; gap: 14px; padding: 20px 38px; border: 0; cursor: pointer; text-decoration: none;
+      font: 20px 'PS2P', monospace; letter-spacing: 0.1em; color: #fff;
+      background: linear-gradient(180deg, #ff4fe0, var(--hot) 55%, #c0129f); border-radius: 4px;
+      box-shadow: 6px 6px 0 #000, 0 0 32px rgba(255, 43, 214, 0.55); transition: transform 0.08s steps(2), box-shadow 0.08s steps(2); }
+    .play:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 #000, 0 0 44px rgba(255, 43, 214, 0.75); }
+    .play:active { transform: translate(3px, 3px); box-shadow: 2px 2px 0 #000, 0 0 20px rgba(255, 43, 214, 0.5); }
+    .play .tri { width: 0; height: 0; border-left: 16px solid #fff; border-top: 10px solid transparent; border-bottom: 10px solid transparent; }
+    .meta { margin: 22px 0 0; font-size: 11px; color: var(--dim); }
+    .meta span { white-space: nowrap; }
+    .links { margin: 18px 0 0; display: flex; gap: 22px; justify-content: center; flex-wrap: wrap; font-size: 15px; }
+    .touch-note { display: none; margin: 18px auto 0; max-width: 520px; padding: 10px 14px; border: 1px solid var(--gold); color: var(--gold); font-size: 14px; }
+    @media (pointer: coarse) { .touch-note { display: block; } }
+
+    section { margin: 72px 0 0; }
+    h2 { font-family: 'Dela', var(--sans); font-weight: 400; font-size: clamp(26px, 3.4vw, 36px); margin: 0 0 18px; transform: skewX(-6deg); color: #fff; text-shadow: 3px 3px 0 #000; }
+    h2 small { display: block; font: 11px 'PS2P', monospace; letter-spacing: 0.16em; color: var(--hot); transform: skewX(6deg); margin-bottom: 8px; text-shadow: none; }
+    .crt { display: block; width: 100%; height: auto; max-width: 860px; margin: 0 auto; background: #000; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 0 0 6px #0c0818, 0 0 50px rgba(43, 240, 255, 0.12); }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+    .card { background: var(--panel); border: 1px solid var(--line); padding: 18px 18px 16px; border-radius: 4px; }
+    .card b { display: block; font: 13px 'PS2P', monospace; letter-spacing: 0.08em; color: var(--gold); margin-bottom: 10px; }
+    .card p { margin: 0; color: var(--ink); font-size: 16px; }
+
+    .shots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .shots a { display: block; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; line-height: 0; }
+    .shots img { width: 100%; height: auto; transition: transform 0.2s; }
+    .shots a:hover img { transform: scale(1.02); }
+    @media (max-width: 640px) { .shots { grid-template-columns: 1fr; } }
+
+    .classic { display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; align-items: center; }
+    .classic video, .classic img { display: block; width: 100%; height: auto; background: #000; border: 1px solid var(--line); border-radius: 4px; }
+    .classic p { margin: 0 0 12px; }
+    @media (max-width: 800px) { .classic { grid-template-columns: 1fr; } }
+
+    table { width: 100%; border-collapse: collapse; font-size: 15px; }
+    td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    td:first-child { white-space: nowrap; color: var(--cyan); font: 11px 'PS2P', monospace; letter-spacing: 0.06em; padding-top: 12px; width: 1%; }
+
+    .cta { text-align: center; margin: 80px 0 0; }
+    footer { margin: 90px 0 0; padding: 26px 0 40px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; text-align: center; }
+    footer .by { font: 12px 'PS2P', monospace; letter-spacing: 0.12em; color: var(--ink); margin-bottom: 10px; }
+
+    @media (prefers-reduced-motion: reduce) { .play, .shots img { transition: none; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <img class="banner" src="media/banner.png" width="1920" height="600" alt="SCRATCH">
+      <p class="tagline">A billiards roguelite from a lost 1998 disc.</p>
+      <p class="sub">Sink balls, collect relics that bend the rules of pool, and work your way down three floors to The House.</p>
+      <a class="play" href="play/"><span class="tri" aria-hidden="true"></span>PLAY</a>
+      <p class="meta px"><span>FREE</span> · <span>RUNS IN YOUR BROWSER</span> · <span>MOUSE + KEYBOARD</span> · <span>V1.0.0</span></p>
+      <p class="touch-note">SCRATCH is played with a mouse. It's best on a computer.</p>
+      <p class="links">
+        <a href="https://github.com/Bouwles/SCRATCH">Source on GitHub</a>
+        <a href="https://github.com/Bouwles/SCRATCH/releases/latest">Download the web build</a>
+      </p>
+    </header>
+
+    <section>
+      <h2><small>WHAT HAPPENS</small>The table fights back</h2>
+      <video class="crt" autoplay muted loop playsinline preload="metadata" poster="media/break.jpg" width="1280" height="720" aria-label="A break with Explosive Chalk and Thunder Cue: the rack detonates, then DOUBLE, TRIPLE">
+        <source src="media/break.mp4" type="video/mp4">
+        <img src="media/break.gif" width="480" height="270" alt="A break with Explosive Chalk and Thunder Cue: the rack detonates, then DOUBLE, TRIPLE">
+      </video>
+    </section>
+
+    <section>
+      <h2><small>WHAT'S INSIDE</small>A run, three floors deep</h2>
+      <div class="grid">
+        <div class="card"><b>45 RELICS</b><p>Explosive chalk, balls with orbits, pockets that get hungry. Pick one you already own and it upgrades.</p></div>
+        <div class="card"><b>6 BOSSES</b><p>A table that tilts, pockets that spit, a pocket that eats shots, a Dealer, a Clock, and The House.</p></div>
+        <div class="card"><b>DAILY SCRATCH</b><p>The same seeded run for everyone, every day. Win once to unlock Endless and five BREAK levels.</p></div>
+        <div class="card"><b>FAIR SAVES</b><p>Close the tab mid-run and pick it up later. Reloading never gets you a free retry.</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2><small>SCREENSHOTS</small>From the game</h2>
+      <div class="shots">
+        <a href="media/screens/01-table.jpg"><img src="media/screens/01-table.jpg" width="1280" height="720" loading="lazy" alt="A table mid-run with relics, style and heat"></a>
+        <a href="media/screens/02-boss-void.jpg"><img src="media/screens/02-boss-void.jpg" width="1280" height="720" loading="lazy" alt="The Void: a break with Thunderclap"></a>
+        <a href="media/screens/03-relics.jpg"><img src="media/screens/03-relics.jpg" width="1280" height="720" loading="lazy" alt="Choosing a relic"></a>
+        <a href="media/screens/05-dealer.jpg"><img src="media/screens/05-dealer.jpg" width="1280" height="720" loading="lazy" alt="The Dealer, phase II"></a>
+      </div>
+    </section>
+
+    <section>
+      <h2><small>HIDDEN INSIDE</small>A completely normal game of 8-ball</h2>
+      <div class="classic">
+        <video autoplay muted loop playsinline preload="metadata" poster="media/switch.jpg" width="1280" height="720" aria-label="Switching to SCRATCH Classic: the tape drags, the CRT shuts off, a quiet lounge fades in">
+          <source src="media/switch.mp4" type="video/mp4">
+          <img src="media/switch.gif" width="480" height="270" alt="Switching to SCRATCH Classic: the tape drags, the CRT shuts off, a quiet lounge fades in">
+        </video>
+        <div>
+          <p>Press <b>PLAY NORMAL 8-BALL</b> and the tape drags, the CRT clicks off, and you're in a quiet late-night lounge with a jazz trio playing.</p>
+          <p>Play standard 8-ball against four AI levels that plan with the same physics you play with and never cheat. There's also local two-player on one mouse and a practice mode.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2><small>HOW TO PLAY</small>Controls</h2>
+      <table>
+        <tr><td>AIM</td><td>Move the mouse. The dots show where the cue ball goes.</td></tr>
+        <tr><td>SHOOT</td><td>Hold the left button to charge, then release. The mouse wheel sets the power cap.</td></tr>
+        <tr><td>SPIN</td><td>W A S D, or drag the dot on the cue-ball widget.</td></tr>
+        <tr><td>CAMERA</td><td>Right-drag to orbit, Q / E to zoom, C for top-down.</td></tr>
+        <tr><td>ITEMS</td><td>1, 2 or 3.</td></tr>
+        <tr><td>PAUSE</td><td>Esc, for settings, fullscreen and the switch to Classic.</td></tr>
+      </table>
+    </section>
+
+    <div class="cta">
+      <a class="play" href="play/"><span class="tri" aria-hidden="true"></span>PLAY SCRATCH</a>
+    </div>
+
+    <footer>
+      <div class="by">MADE BY PAUL NERCESSIAN</div>
+      <div>Version 1.0.0 · <a href="https://github.com/Bouwles/SCRATCH">GitHub</a> · <a href="https://github.com/Bouwles/SCRATCH/blob/main/ATTRIBUTIONS.md">Credits and licences</a></div>
+      <div style="margin-top:8px">Built with three.js. Every sound and image is generated by the game as you play.</div>
+    </footer>
+  </main>
+  <script>
+    // with reduced motion, the loops wait for a click instead of playing on their own
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      for (const v of document.querySelectorAll('video')) { v.removeAttribute('autoplay'); v.pause(); v.controls = true; }
+    }
+  </script>
+</body>
+</html>

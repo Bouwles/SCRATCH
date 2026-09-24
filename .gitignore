@@ -1,5 +1,6 @@
 node_modules
 dist
+_site
 .DS_Store
 
 # release binaries live on the GitHub release, not in git
