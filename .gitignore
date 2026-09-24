@@ -1,0 +1,8 @@
+node_modules
+dist
+.DS_Store
+
+# release binaries live on the GitHub release, not in git
+release/itch/*.zip
+release/itch/trailer/
+release/itch/screenshots/
