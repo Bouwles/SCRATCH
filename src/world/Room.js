@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { ps1Material, disposeTree } from '../render/materials.js';
 import {
-  carpetTexture, wallTexture, ceilingTexture, cityTexture, rainTexture, neonTextTexture, posterTexture,
+  carpetTexture, wallTexture, ceilingTexture, cityTexture, rainTexture, neonTextTexture, posterTexture, oddPosterTexture,
   vendingTexture, arcadeTexture, animatedScreen, smokeTexture, starTexture, glowTexture, woodTexture, rng, canvas, toTex,
 } from '../render/textures.js';
 import { FLOOR_Y } from './Table.js';
@@ -145,6 +145,12 @@ export class Room {
   personality(theme) {
     const f = this.flags || {};
     if (f.champion) this.poster(6, RX - 0.03, 0.55, -0.9, -Math.PI / 2, 1.1);
+    // somebody put up a poster nobody remembers putting up
+    if (f.oddPoster && theme.props !== 'rajis') {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.46), ps1Material({ map: oddPosterTexture(), affine: 0.9 }));
+      m.position.set(-RX + 0.03, 0.3, 1.2); m.rotation.y = Math.PI / 2; m.rotation.z = 0.05;
+      this.group.add(m);
+    }
     if (f.heat5) {
       const lamp = this.neonSign('HEAT V', '#ff3010', -RX + 0.08, 1.75, -1.6, Math.PI / 2, 0.7);
       this.anim.push((dt, t) => { lamp.material.uniforms.uOpacity.value = 0.75 + Math.sin(t * 3) * 0.25; });

@@ -55,8 +55,29 @@ const floorTex = () => tex(1024, 1024, (x, w, h) => {
 export const ROOM_STYLES = {
   lounge: { fabric: '#2a3a31', rug: ['#3e1216', '#171c2c', '#9a7440'], curtain: [62, 16, 22], leather: '#4a1c14', wood: 0xffffff, floor: 0xffffff },
   parlour: { fabric: '#1b2a44', damask: true, rug: ['#16281c', '#3a1418', '#b08a4a'], curtain: [20, 42, 32], leather: '#1f3a2a', wood: 0xd8b898, floor: 0xe0d0c0 },
-  loft: { fabric: '#6a3424', brick: true, rug: ['#2a2a2c', '#141416', '#7a7a80'], curtain: [36, 36, 40], leather: '#18181a', wood: 0x8a8a8a, floor: 0x9a9a9a },
+  loft: { fabric: '#23252b', rug: ['#2a2a2c', '#141416', '#7a7a80'], curtain: [36, 36, 40], leather: '#18181a', wood: 0x6a6a70, floor: 0x7a7a80 },
+  hall: { fabric: '#121a2c', rug: ['#16213a', '#0c1222', '#c8a45a'], curtain: [20, 26, 44], leather: '#1a1a1e', wood: 0x8a8a90, floor: 0xa0a0a8, hall: true },
 };
+
+// the Tournament Hall's scoreboard
+const scoreTex = () => tex(1024, 256, (x, w, h) => {
+  x.fillStyle = '#07080c'; x.fillRect(0, 0, w, h);
+  x.strokeStyle = '#c8a45a'; x.lineWidth = 4; x.strokeRect(8, 8, w - 16, h - 16);
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = '#e4c992'; x.font = '500 34px Inter, Arial, sans-serif'; x.letterSpacing = '14px';
+  x.fillText('SCRATCH CLASSIC OPEN', w / 2, 70);
+  x.fillStyle = '#f1ebdf'; x.font = '300 92px Inter, Arial, sans-serif'; x.letterSpacing = '6px';
+  x.fillText('8 · BALL', w / 2, 168);
+}, { wrap: false });
+const bannerTex = (i) => tex(128, 512, (x, w, h) => {
+  x.fillStyle = ['#141c34', '#2a1418', '#10281e'][i % 3]; x.fillRect(0, 0, w, h);
+  x.fillStyle = '#c8a45a'; x.fillRect(0, 0, w, 10); x.fillRect(0, h - 40, w, 4);
+  x.beginPath(); x.moveTo(0, h - 36); x.lineTo(w / 2, h); x.lineTo(w, h - 36); x.fill();
+  x.save(); x.translate(w / 2, h / 2 - 20); x.rotate(-Math.PI / 2);
+  x.fillStyle = '#e4c992'; x.font = '500 40px "Cormorant Garamond", Georgia, serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(['EST. 1998', 'CHAMPIONS', 'EIGHT BALL'][i % 3], 0, 0);
+  x.restore();
+}, { wrap: false });
 
 const rugTex = (st = ROOM_STYLES.lounge) => tex(1024, 736, (x, w, h) => {
   x.fillStyle = st.rug[0]; x.fillRect(0, 0, w, h);
@@ -302,8 +323,10 @@ export class Lounge {
       add(new THREE.CylinderGeometry(0.2, 0.5, 1.0, 32, 1, true), coneMat, px, LAMP_Y - 0.58, 0);
     }
 
+    if (st.hall) this.buildHall(g, M, add, trimWood, brass, black);
     // ---- the bar along the back wall
     const bz = -RZ;
+    if (!st.hall) {
     const barFront = M({ map: wainscotTex(), gloss: 0.4, shine: 50 });
     add(new RoundedBoxGeometry(3.4, 1.05, 0.6, 3, 0.02), barFront, 0, FLOOR_Y + 0.525, bz + 1.15);
     add(new THREE.BoxGeometry(3.52, 0.05, 0.72), M({ map: marbleTex(), gloss: 0.9, shine: 110 }), 0, FLOOR_Y + 1.075, bz + 1.12);
@@ -345,10 +368,12 @@ export class Lounge {
       ring.rotation.x = Math.PI / 2;
     }
 
+    }
     // ---- chesterfield along the left wall
     const tuft = M({ map: leatherTex(st.leather), gloss: 0.5, shine: 34 });
     const smooth = M({ map: plainLeather(st.leather), gloss: 0.5, shine: 34 });
     const sx0 = -RX + 0.62, sz0 = 0.2;
+    if (!st.hall) {
     add(new RoundedBoxGeometry(0.9, 0.36, 2.3, 3, 0.06), smooth, sx0, FLOOR_Y + 0.26, sz0);
     add(new RoundedBoxGeometry(0.24, 0.5, 2.3, 4, 0.1), tuft, sx0 - 0.36, FLOOR_Y + 0.62, sz0);
     for (const s of [-1, 1]) add(new RoundedBoxGeometry(0.9, 0.5, 0.24, 4, 0.11), tuft, sx0, FLOOR_Y + 0.52, sz0 + s * 1.12);
@@ -362,6 +387,7 @@ export class Lounge {
       add(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 24), trimWood, sx0, FLOOR_Y + 0.01, tz);
       add(new THREE.LatheGeometry([[0, 0], [0.07, 0], [0.08, 0.04], [0.05, 0.16], [0.03, 0.3], [0, 0.3]].map(([a, b]) => new THREE.Vector2(a, b)), 20), brass, sx0, FLOOR_Y + 0.6, tz);
       add(new THREE.CylinderGeometry(0.12, 0.18, 0.2, 28, 1, true), M({ color: 0xf2dcb4, emissive: 0x8a6a3c, side: THREE.DoubleSide }), sx0, FLOOR_Y + 0.98, tz);
+    }
     }
     // art above the sofa, sconces either side
     const frame = M({ color: 0x8a6a36, gloss: 1.2, shine: 70 });
@@ -412,8 +438,7 @@ export class Lounge {
       grp.position.set(x, FLOOR_Y, z); grp.rotation.y = ry;
       g.add(grp);
     };
-    chair(RX - 0.9, -2.9);
-    chair(RX - 0.9, 2.9);
+    if (!st.hall) { chair(RX - 0.9, -2.9); chair(RX - 0.9, 2.9); }
 
     // ---- front wall: tall windows over the city, velvet curtains, a plant
     const fz = RZ - 0.02;
@@ -442,12 +467,69 @@ export class Lounge {
     this.setLighting(preset);
   }
 
+  // TOURNAMENT HALL: tiered seats with a quiet crowd, a scoreboard, banners, rope posts
+  buildHall(g, M, add, trimWood, brass, black) {
+    const seat = M({ color: 0x1c1f28, gloss: 0.2, shine: 20 });
+    const step = M({ color: 0x2a2e38, gloss: 0.15, shine: 16 });
+    const people = [];
+    for (const [side, z0, ry] of [['back', -RZ + 0.5, 0], ['left', -RX + 0.5, Math.PI / 2]]) {
+      for (let t = 0; t < 3; t++) {
+        const y = FLOOR_Y + 0.22 + t * 0.32, d = 0.5 + t * 0.55;
+        const len = side === 'back' ? 6.2 : 5.2;
+        const m = side === 'back' ? add(new THREE.BoxGeometry(len, 0.44 + t * 0.32, 0.55), step, 0, FLOOR_Y + (0.44 + t * 0.32) / 2, z0 + (2 - t) * 0.55 - 0.55)
+          : add(new THREE.BoxGeometry(0.55, 0.44 + t * 0.32, len), step, z0 + (2 - t) * 0.55 - 0.55, FLOOR_Y + (0.44 + t * 0.32) / 2, 0);
+        void m; void d;
+        for (let i = 0; i < 16; i++) {
+          if (Math.random() < 0.45) continue;
+          const u = -len / 2 + 0.3 + i * (len - 0.6) / 15;
+          const px = side === 'back' ? u : z0 + (2 - t) * 0.55 - 0.55, pz = side === 'back' ? z0 + (2 - t) * 0.55 - 0.55 : u;
+          people.push([px, y + 0.3, pz, ry]);
+        }
+      }
+    }
+    // the crowd: dim, still, facing the table
+    const body = new THREE.CapsuleGeometry(0.14, 0.34, 3, 8);
+    const crowd = new THREE.InstancedMesh(body, M({ color: 0x15161c, gloss: 0.08, shine: 10 }), people.length);
+    const headG = new THREE.SphereGeometry(0.1, 10, 8);
+    const heads = new THREE.InstancedMesh(headG, M({ color: 0x2a221c, gloss: 0.15, shine: 12 }), people.length);
+    const mm = new THREE.Matrix4(), q = new THREE.Quaternion();
+    people.forEach(([x, y, z, ry], i) => {
+      q.setFromEuler(new THREE.Euler(0, ry, 0));
+      mm.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(1, 1, 0.8)); crowd.setMatrixAt(i, mm);
+      mm.compose(new THREE.Vector3(x, y + 0.36, z), q, new THREE.Vector3(1, 1.1, 1)); heads.setMatrixAt(i, mm);
+    });
+    crowd.frustumCulled = false; heads.frustumCulled = false;
+    g.add(crowd, heads);
+    void seat;
+    // scoreboard over the back seats
+    add(new THREE.BoxGeometry(2.3, 0.62, 0.06), black, 0, FLOOR_Y + 2.35, -RZ + 0.05);
+    add(new THREE.PlaneGeometry(2.2, 0.55), M({ map: scoreTex(), unlit: true, color: 0xd8d8d8, fog: 0 }), 0, FLOOR_Y + 2.35, -RZ + 0.085);
+    // banners from the ceiling beams
+    [-3.2, 3.2, 1.6].forEach((bx, i) => { const b = add(new THREE.PlaneGeometry(0.42, 1.6), M({ map: bannerTex(i), gloss: 0.1, side: THREE.DoubleSide }), bx, CEIL - 0.95, RZ - 0.6, Math.PI); void b; });
+    // rope posts around the table
+    const posts = [[-1.55, -1.05], [1.55, -1.05], [-1.55, 1.05], [1.55, 1.05]];
+    for (const [px, pz] of posts) {
+      add(new THREE.CylinderGeometry(0.025, 0.025, 0.9, 12), brass, px, FLOOR_Y + 0.45, pz);
+      add(new THREE.CylinderGeometry(0.12, 0.14, 0.03, 16), brass, px, FLOOR_Y + 0.015, pz);
+      add(new THREE.SphereGeometry(0.04, 12, 8), brass, px, FLOOR_Y + 0.92, pz);
+    }
+    const rope = M({ color: 0x5a1418, gloss: 0.4, shine: 30 });
+    for (const [a, b] of [[0, 1], [2, 3], [0, 2], [1, 3]]) {
+      const [ax, az] = posts[a], [bx, bz] = posts[b];
+      const len = Math.hypot(bx - ax, bz - az);
+      const r = add(new THREE.CylinderGeometry(0.012, 0.012, len, 8), rope, (ax + bx) / 2, FLOOR_Y + 0.82, (az + bz) / 2);
+      r.rotation.order = 'YXZ';
+      r.rotation.set(Math.PI / 2, Math.atan2(bx - ax, bz - az), 0);
+    }
+    void trimWood;
+  }
+
   // slots 0-2: pendants, 3: bar, 4: sofa lamp, 5: windows, 6: right wall
   setLighting(p) {
     const L = this.lights;
     const lamp = new THREE.Color().setRGB(...p.lamp);
     PENDANTS.forEach((x, i) => L.set(i, new THREE.Vector3(x, LAMP_Y - 0.1, 0), lamp, 2.5, 1.0));
-    const a = p.accent;
+    const a = p.accent * (this.roomId === 'hall' ? 1.35 : 1);
     L.set(3, new THREE.Vector3(0, FLOOR_Y + 1.62, -RZ + 0.6), new THREE.Color(1.0, 0.62, 0.3), 4.0, 1.25 * a);
     L.set(4, new THREE.Vector3(-RX + 0.8, FLOOR_Y + 1.1, 1.6), new THREE.Color(1.0, 0.72, 0.42), 3.6, 1.1 * a);
     L.set(5, new THREE.Vector3(0, FLOOR_Y + 1.7, RZ - 0.7), new THREE.Color(0.38, 0.46, 0.85), 4.6, 0.8 * p.window);

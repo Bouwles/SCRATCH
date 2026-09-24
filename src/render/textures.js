@@ -289,6 +289,21 @@ export function posterTexture(i) {
   return toTex(c, { wrap: false });
 }
 
+// a poster that should not be in a pool club: a stencilled missile and one word
+export function oddPosterTexture() {
+  const [c, x] = hcanvas(36, 48);
+  x.fillStyle = '#1a1e14'; x.fillRect(0, 0, 36, 48);
+  x.fillStyle = '#c8c0a0';
+  x.beginPath(); x.moveTo(18, 5); x.lineTo(22, 12); x.lineTo(22, 32); x.lineTo(26, 38); x.lineTo(10, 38); x.lineTo(14, 32); x.lineTo(14, 12); x.fill();
+  x.fillStyle = '#1a1e14'; x.fillRect(14, 22, 8, 2);
+  x.fillStyle = '#8fd14f'; x.font = 'bold 6px "Press Start 2P", monospace'; x.textAlign = 'center';
+  x.fillText('RAJIS', 18, 46);
+  const r = rng(77);
+  x.fillStyle = 'rgba(255,255,255,0.1)';
+  for (let k = 0; k < 24; k++) x.fillRect(r() * 36 | 0, r() * 48 | 0, 1, 1 + (r() * 2 | 0));
+  return toTex(c, { wrap: false });
+}
+
 // Tiny equirect environment for pixelated ball reflections.
 export function envTexture(theme) {
   const W = 64, H = 32;
@@ -461,6 +476,10 @@ export function arcadeTexture(color = '#2b8bff') {
 }
 
 // Animated screen: returns {tex, draw(t)} that repaints a tiny canvas.
+// every CRT in the room can be taken over for a moment (see the RAJIS clues)
+export const screenOverride = { lines: null, until: 0, fg: '#ff3b30', bg: '#1a0000' };
+export function takeOverScreens(lines, ms, fg = '#ff3b30', bg = '#1a0000') { Object.assign(screenOverride, { lines, until: performance.now() + ms, fg, bg }); }
+
 export function animatedScreen(kind, seed = 1) {
   const W = 32, H = 24;
   const c = canvas(W, H), x = c.getContext('2d');
@@ -470,6 +489,19 @@ export function animatedScreen(kind, seed = 1) {
   let last = -1;
   const draw = (t) => {
     const frame = Math.floor(t * 12);
+    if (screenOverride.lines && performance.now() < screenOverride.until) {
+      if (frame === last) return;
+      last = frame;
+      x.fillStyle = screenOverride.bg; x.fillRect(0, 0, W, H);
+      x.fillStyle = frame % 6 < 5 ? screenOverride.fg : screenOverride.bg;
+      x.font = '5px "Press Start 2P", monospace'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      const L = screenOverride.lines;
+      L.forEach((ln, i) => x.fillText(ln, W / 2, H / 2 + (i - (L.length - 1) / 2) * 7));
+      x.fillStyle = 'rgba(0,0,0,0.35)'; x.fillRect(0, (frame * 2) % H, W, 2);
+      x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+      tex.needsUpdate = true;
+      return;
+    }
     if (frame === last) return;
     last = frame;
     if (kind === 'static') {

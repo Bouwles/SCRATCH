@@ -36,7 +36,7 @@ export const AfterMixin = {
   menuFlags() {
     const d = this.meta?.data;
     if (!d) return {};
-    return { champion: (d.stats.wins || 0) >= 1, heat5: (d.bests.highestHeat || 0) >= 5, clock: !!d.afterhours?.found, radar: !!d.rajis?.found };
+    return { champion: (d.stats.wins || 0) >= 1, heat5: (d.bests.highestHeat || 0) >= 5, clock: !!d.afterhours?.found, radar: !!d.rajis?.found, oddPoster: !d.rajis?.found && (d.rajis?.clues || 0) >= 2 };
   },
   // a build gets a name once it has enough relics to be one
   buildCheck() {
@@ -160,7 +160,7 @@ export const AfterMixin = {
   contractFail(why) {
     const c = this.contractDef();
     this.run.contract = null;
-    this.ui.toast(`${c.name} — ${why}`, '#ff3b5c', 'CONTRACT VOID');
+    this.ui.contractBanner('CONTRACT FAILED', `${c.name} · ${why}`, false);
     this.audio.fail();
     this.saveRun();
   },
@@ -171,7 +171,7 @@ export const AfterMixin = {
     this.meta.stat('contracts').forEach(a => this.ui.achievement(this.meta.data, a.id));
     this.meta.save();
     this.audio.win();
-    this.ui.toast(c.rewardText, '#ffc21c', `CONTRACT COMPLETE · ${c.name}`);
+    this.ui.contractBanner('CONTRACT COMPLETE', `${c.name} · ${c.rewardText}`, true);
     switch (c.reward) {
       case 'chips45': this.addChips(45); break;
       case 'chips30': this.addChips(30); break;

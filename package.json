@@ -1,7 +1,7 @@
 {
   "name": "scratch",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "description": "SCRATCH: AFTERHOURS — a billiards roguelite from a lost 1998 disc, with a normal game of 8-ball hidden inside.",
   "author": "Paul Nercessian",

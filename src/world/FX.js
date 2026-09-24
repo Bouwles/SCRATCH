@@ -144,6 +144,26 @@ export class FX {
     for (const p of pts) if (Math.random() < 0.5) this.spawn(p.x, p.y, p.z, (Math.random() - 0.5) * 0.6, Math.random() * 0.6, (Math.random() - 0.5) * 0.6, color, 0.3, 1, { grav: 1 });
   }
 
+  // RAJIS lock-on: four brackets snap shut on a pocket, then fade
+  lockon(x, z, color = 0xff3b30) {
+    const mat = ps1Material({ color, additive: true, unlit: true, fog: 0 });
+    const g = new THREE.Group();
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2 + Math.PI / 4;
+      const br = new THREE.Group();
+      const h = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.006).rotateX(-Math.PI / 2), mat); h.position.x = -0.012;
+      const v = new THREE.Mesh(new THREE.PlaneGeometry(0.006, 0.03).rotateX(-Math.PI / 2), mat); v.position.z = -0.012;
+      br.add(h, v);
+      br.rotation.y = -a + Math.PI / 4;
+      br.userData.dir = [Math.cos(a), Math.sin(a)];
+      g.add(br);
+    }
+    g.position.set(x, 0.006, z);
+    this.root.add(g);
+    this.locks = this.locks || [];
+    this.locks.push({ g, mat, t: 0 });
+  }
+
   // --- trails: ribbon following a ball
   trail(ball, color, width = 0.05) {
     let tr = this.trails.get(ball.id);
@@ -254,5 +274,13 @@ export class FX {
       if (b.life <= 0) { this.root.remove(b.line); b.line.geometry.dispose(); b.line.material.dispose(); this.bolts.splice(k, 1); }
     }
     this.updateTrails(dt);
+    for (let k = (this.locks || []).length - 1; k >= 0; k--) {
+      const L = this.locks[k];
+      L.t += dt;
+      const close = Math.min(1, L.t / 0.18), d = 0.09 - 0.05 * (1 - Math.pow(1 - close, 3));
+      for (const br of L.g.children) br.position.set(br.userData.dir[0] * d, 0, br.userData.dir[1] * d);
+      L.mat.uniforms.uOpacity.value = L.t < 0.45 ? 1 : Math.max(0, 1 - (L.t - 0.45) / 0.3);
+      if (L.t > 0.75) { this.root.remove(L.g); L.g.traverse(o => o.geometry?.dispose()); L.mat.dispose(); this.locks.splice(k, 1); }
+    }
   }
 }

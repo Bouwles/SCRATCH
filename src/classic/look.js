@@ -3,24 +3,22 @@
 // Cosmetics are deliberately few and realistic.
 
 import { canvas, toTex, rng } from '../render/textures.js';
+import { paintBall } from '../render/ballpaint.js';
+import { ballSkinById, cueSkinById, FELTS as ALL_FELTS, CUE_SKINS, BALL_SKINS } from '../game/cosmetics.js';
 
 // ------------------------------------------------------------ choices
-export const FELTS = [
-  { id: 'green', name: 'Forest Green', felt: '#1f6441', cushion: '#1a5537' },
-  { id: 'burgundy', name: 'Burgundy', felt: '#6a1c29', cushion: '#581722' },
-  { id: 'navy', name: 'Navy', felt: '#1c2d57', cushion: '#172649' },
-  { id: 'blue', name: 'Tournament Blue', felt: '#1d5a8f', cushion: '#184c79' },
-  { id: 'black', name: 'Black', felt: '#1d1d20', cushion: '#18181a' },
-  { id: 'red', name: 'Championship Red', felt: '#7a1a1e', cushion: '#661519' },
-  { id: 'teal', name: 'Teal', felt: '#12575c', cushion: '#0f494d' },
-  { id: 'slate', name: 'Slate Grey', felt: '#454a50', cushion: '#3a3e43' },
-];
+// felts, cues and ball sets are shared with the roguelite (game/cosmetics.js);
+// Classic shows the classy ones unless COSMETICS is set to ALL COMPATIBLE
+export const FELTS = ALL_FELTS.filter(f => !f.rogueOnly);
+export const CUES = CUE_SKINS;
+export const BALLS = BALL_SKINS;
 
 // the room around the table: same lounge, three interiors
 export const ROOMS = [
-  { id: 'lounge', name: 'The Lounge' },
-  { id: 'parlour', name: 'The Parlour' },
-  { id: 'loft', name: 'The Loft' },
+  { id: 'lounge', name: 'Midnight Lounge', desc: 'Walnut, leather and rain on the tall windows.', unlock: {}, kind: 'room' },
+  { id: 'parlour', name: 'Private Club', desc: 'Damask walls, green leather, a clock that ticks.', unlock: {}, kind: 'room' },
+  { id: 'loft', name: 'Penthouse', desc: 'The city at your feet and the air conditioning humming.', unlock: { clevel: 2 }, kind: 'room' },
+  { id: 'hall', name: 'Tournament Hall', desc: 'Bright lights, a scoreboard and a crowd that keeps its voice down.', unlock: { clevel: 3 }, kind: 'room' },
 ];
 
 export const LIGHTS = [
@@ -29,30 +27,6 @@ export const LIGHTS = [
   { id: 'midnight', name: 'Midnight', lamp: [1.38, 1.22, 0.98], ambient: [0.026, 0.026, 0.034], sky: [0.035, 0.035, 0.05], ground: [0.012, 0.012, 0.016], accent: 0.62, window: 0.85, fog: [0.01, 0.01, 0.014] },
 ];
 
-const BALL_SETS = {
-  classic: {
-    name: 'Classic', white: '#f3eee1', measle: false,
-    colors: ['#f3eee1', '#f0b20a', '#1b46b4', '#cf1f2a', '#4a2783', '#ef630f', '#0f7041', '#7a1b21', '#0c0c0e'],
-  },
-  tournament: {
-    name: 'Tournament', white: '#fbfbf6', measle: true,
-    colors: ['#fbfbf6', '#ffc300', '#0f50e0', '#e6151f', '#5a2ea6', '#ff6a00', '#0a8a4a', '#8e1418', '#08080a'],
-  },
-  vintage: {
-    name: 'Vintage', white: '#ebdfc4', measle: false,
-    colors: ['#ebdfc4', '#d6a238', '#2c4a88', '#b23a31', '#5a3a6d', '#cd7036', '#2f6a4a', '#6c2a25', '#161412'],
-  },
-};
-export const BALLS = Object.entries(BALL_SETS).map(([id, b]) => ({ id, name: b.name }));
-
-export const CUES = [
-  { id: 'wood', name: 'Classic Wood' },
-  { id: 'ebony', name: 'Ebony', ach: 'hustler' },
-  { id: 'ivory', name: 'Ivory Style' },
-  { id: 'carbon', name: 'Carbon' },
-  { id: 'birdseye', name: 'Bird’s-eye Maple' },
-  { id: 'goldinlay', name: 'Gold Inlay', ach: 'tourney' },
-];
 
 export const byId = (list, id) => list.find(x => x.id === id) || list[0];
 
@@ -120,7 +94,7 @@ export function tableTheme(felt) {
   const f = byId(FELTS, felt);
   return {
     id: 'classic', classic: true, turnedLegs: true,
-    felt: f.felt, cushion: f.cushion, wood: ['#54301a', '#2a170d'], metal: '#8a7248', lamp: '#fff0d8',
+    felt: f.felt, cushion: f.cushion, wood: ['#54301a', '#2a170d'], metal: '#8a7248', lamp: '#fff0d8', feltFx: f.fx || null, feltLine: f.line || null,
     ringW: 0.011, ringMat: { color: 0x141110, gloss: 0.7, shine: 50 },       // leather pocket liners
     diamondMat: { color: 0xd8ccb0, gloss: 1.2, shine: 80 },                 // mother-of-pearl sights, lit like the rails
     tex: {
@@ -134,48 +108,10 @@ export function tableTheme(felt) {
 }
 
 // ------------------------------------------------------------ balls
-function ballTex(num, set) {
-  const W = 1024, H = 512;
-  const c = canvas(W, H), x = c.getContext('2d');
-  const white = set.white, col = set.colors[num >= 9 ? num - 8 : num];
-  if (num === 0) {
-    x.fillStyle = white; x.fillRect(0, 0, W, H);
-    if (set.measle) {
-      x.fillStyle = '#c8202a';
-      for (const u of [0.125, 0.375, 0.625, 0.875]) { x.beginPath(); x.arc(u * W, H / 2, 15, 0, 7); x.fill(); }
-      for (const v of [0.12, 0.88]) for (const u of [0.25, 0.75]) { x.beginPath(); x.ellipse(u * W, v * H, 15 / Math.sin(v * Math.PI), 15, 0, 0, 7); x.fill(); }
-    }
-  } else if (num >= 9) {
-    x.fillStyle = white; x.fillRect(0, 0, W, H);
-    x.fillStyle = col; x.fillRect(0, H * 0.325, W, H * 0.35);
-  } else {
-    x.fillStyle = col; x.fillRect(0, 0, W, H);
-  }
-  if (num > 0) {
-    for (const u of [0.25, 0.75]) {
-      const cx = u * W, cy = H / 2;
-      x.fillStyle = white;
-      x.beginPath(); x.arc(cx, cy, 58, 0, 7); x.fill();
-      x.fillStyle = '#121212';
-      x.font = `700 ${num > 9 ? 62 : 70}px Inter, "Helvetica Neue", Arial, sans-serif`;
-      x.textAlign = 'center'; x.textBaseline = 'middle';
-      x.fillText(String(num), cx + (num > 9 ? -1 : 0), cy + 3);
-      if (num === 6 || num === 9) { x.fillRect(cx - 14, cy + 34, 28, 5); }      // the underline that tells 6 from 9
-    }
-  }
-  const t = toTex(c, { wrap: false });
-  t.anisotropy = 8;
-  return t;
-}
-
-// a skin object for BallView (it calls texture(num) for each ball)
+// Classic paints the shared ball sets (game/cosmetics.js) at full resolution.
 export function ballSkin(id) {
-  const set = BALL_SETS[id] || BALL_SETS.classic;
-  return {
-    id: 'classic-' + id,
-    texture: (num) => ballTex(num, set),
-    mat: { reflect: 0.2, spec: 1.1, rimAmt: 0, rim: 0x000000 },
-  };
+  const set = ballSkinById(id);
+  return { ...set, id: 'classic-' + set.id, texture: (num) => paintBall(num, set, 'classic'), mat: { reflect: 0.2, spec: 1.1, rimAmt: 0, rim: 0x000000, ...set.mat, bands: 4 } };
 }
 
 // ------------------------------------------------------------ cues
@@ -292,6 +228,15 @@ function cueTex(id) {
 }
 
 export function cueSkin(id) {
+  const c = cueSkinById(id);
+  if (!c.hi) {
+    // a roguelite cue at the Classic table: its pixel art, scaled up crisply
+    return { ...c, id: 'classic-' + c.id, texture: () => {
+      const lo = canvas(16, 256); c.paint(lo.getContext('2d'), 16, 256);
+      const hi = canvas(64, 1024), x = hi.getContext('2d'); x.imageSmoothingEnabled = false; x.drawImage(lo, 0, 0, 64, 1024);
+      const t = toTex(hi, { wrap: false }); t.flipY = false; return t;
+    } };
+  }
   const shiny = id === 'carbon' ? { gloss: 0.9, shine: 90 } : id === 'ebony' || id === 'goldinlay' ? { gloss: 0.85, shine: 80 } : { gloss: 0.6, shine: 60 };
-  return { id: 'classic-' + id, texture: () => cueTex(id), mat: shiny };
+  return { ...c, id: 'classic-' + c.hi, texture: () => cueTex(c.hi), mat: shiny };
 }

@@ -314,15 +314,34 @@ EVENTS.push(
   },
 );
 
+// Somebody's old machine. It is not advertised anywhere, and it should not be here.
+const arcadeChoices = [
+  { label: 'INSERT 8 CHIPS', can: G => G.run.chips >= 8, act(G) { G.addChips(-8); G.run.rajisTrigger = true; return 'THE COINS DROP. NOTHING HAPPENS.'; } },
+  { label: 'KICK IT', act(G) { G.addChips(3); G.noteClue?.('kick'); return 'IT SPITS OUT 3 CHIPS. FOR A SECOND THE SCREEN SAYS SOMETHING ELSE.'; } },
+  { label: 'LEAVE', act() { return 'THE SCREEN FOLLOWS YOU ACROSS THE ROOM.'; } },
+];
+export const ARCADE_EVENT = {
+  id: 'arcade_rajis', title: 'THERE IS AN OLD ARCADE MACHINE IN THE BACK ROOM.', weight: 3,
+  when: (run, meta) => !meta?.data?.rajis?.found && run.floor >= 2 && (meta?.data?.rajis?.clues || 0) >= 1 && meta.data.stats && ((meta.data.stats.wins || 0) >= 2 || ((meta.data.stats.wins || 0) >= 1 && (meta.data.stats.runs || 0) >= 6) || ((meta.data.stats.runs || 0) >= 12 && (meta.data.bests?.furthestFloor || 0) >= 3)),
+  text: 'Behind the crates. The marquee is dark. The screen says RAJIS in green letters, and under it: INSERT 8 CHIPS.',
+  choices: arcadeChoices,
+};
+EVENTS.push(ARCADE_EVENT, {
+  id: 'roof', title: 'SOMETHING HIT THE ROOF.', rare: true,
+  when: (run, meta) => (meta?.data?.stats?.runs || 0) >= 4,
+  text: 'A thump, then dust from the ceiling. Nobody else in the club looked up.',
+  choices: [
+    { label: 'GO UP AND LOOK', act(G) { G.noteClue?.('roof'); const r = rollRelics(1, G.run.relics, {})[0]; if (r) { G.gainRelic(r); return `THE ROOF IS SCORCHED IN A NEAT CIRCLE. IN THE MIDDLE: ${r.name}.`; } G.addChips(8); return 'THE ROOF IS SCORCHED IN A NEAT CIRCLE. +8 CHIPS.'; } },
+    { label: 'KEEP PLAYING', act(G) { G.addChips(4); return 'IT DOES NOT HAPPEN AGAIN. PROBABLY. +4 CHIPS.'; } },
+  ],
+});
+
 // only after closing time
 export const AFTER_EVENTS = [
   {
-    id: 'arcade_signal', title: 'AN ARCADE MACHINE NOBODY PLUGGED IN.',
-    text: 'The screen reads INSERT 8 CHIPS. The marquee is blank. The cable is lying on the floor, a metre from the wall.',
-    choices: [
-      { label: 'INSERT 8 CHIPS', can: G => G.run.chips >= 8, act(G) { G.addChips(-8); G.run.rajisTrigger = true; return 'THE SCREEN GOES BLACK. THEN IT GOES VERY, VERY RED.'; } },
-      { label: 'WALK AWAY', act() { return 'THE SCREEN FOLLOWS YOU ACROSS THE ROOM.'; } },
-    ],
+    id: 'arcade_signal', title: 'THERE IS AN OLD ARCADE MACHINE IN THE BACK ROOM.',
+    text: 'Nobody plugged it in. The screen says RAJIS anyway, and under it: INSERT 8 CHIPS.',
+    choices: arcadeChoices,
   },
   {
     id: 'chairs_up', title: 'THE CHAIRS ARE UP ON THE TABLES.',
@@ -358,7 +377,7 @@ export function pickEvent(seen = [], run = null, meta = null) {
   const ok = (e) => !e.when || (run && e.when(run, meta));
   const pool = EVENTS.filter(e => !seen.includes(e.id) && ok(e));
   const src = pool.length ? pool : EVENTS.filter(e => !e.rare && ok(e));
-  const w = src.map(e => (e.rare ? 0.12 : 1));
+  const w = src.map(e => e.weight ?? (e.rare ? 0.12 : 1));
   let x = rand() * w.reduce((a, b) => a + b, 0);
   for (let i = 0; i < src.length; i++) { x -= w[i]; if (x <= 0) return src[i]; }
   return src[0];

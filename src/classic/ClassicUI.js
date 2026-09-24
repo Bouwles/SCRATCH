@@ -3,7 +3,10 @@
 
 import './classic.css';
 import { FELTS, LIGHTS, CUES, BALLS, ROOMS, byId } from './look.js';
-import { LEVELS, STYLES } from './ai.js';
+import { LEVELS, STYLES, STYLE_IDS } from './ai.js';
+import { OPPONENTS, oppById, FORMATS, formatById, portrait, CLEVEL_XP } from './people.js';
+import { DRILLS, DRILL_IDS } from './drills.js';
+import { TRAILS, POCKET_FX } from '../game/cosmetics.js';
 import { SOLIDS, STRIPES } from './rules.js';
 import { GAME_VERSION } from '../game/meta.js';
 
@@ -13,6 +16,7 @@ function h(tag, cls = '', html = '') {
   if (html) e.innerHTML = html;
   return e;
 }
+const tc = (s) => String(s).replace(/[A-Za-z\u2019']+/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
 const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const BALL_HEX = ['#f3eee1', '#f0b20a', '#1b46b4', '#cf1f2a', '#4a2783', '#ef630f', '#0f7041', '#7a1b21', '#0c0c0e'];
 const pipStyle = (n) => {
@@ -108,33 +112,38 @@ export class ClassicUI {
   // ---------------------------------------------------------- main menu
   menu() {
     this.closeAll();
+    const c = this.c, d = c.data, st = d.stats;
     const el = h('div', 'c-screen c-side');
+    const need = CLEVEL_XP(d.level);
     el.innerHTML = `
       <div class="c-col">
         <div class="c-brand"><div class="w">SCRATCH</div><div class="k">CLASSIC</div></div>
         <div class="c-menu"></div>
       </div>
+      <div class="c-card ia"><div class="lv">Classic level <b>${d.level}</b></div><div class="xp"><i style="width:${Math.min(100, d.xp / need * 100)}%"></i></div>
+        <div class="kv"><span>Win streak</span><b>${st.streak || 0}</b></div><div class="kv"><span>Best streak</span><b>${st.bestStreak || 0}</b></div><div class="kv"><span>Matches won</span><b>${st.won || 0}</b></div></div>
       <div class="c-foot"><span class="c-ver">v${GAME_VERSION} · <u>Credits</u></span><span class="c-sig">Made by Paul Nercessian</span></div>
       <div class="c-fs">Fullscreen</div>`;
     const menu = el.querySelector('.c-menu');
     const defs = [
-      ['VS AI', () => this.setupAI()],
-      ['LOCAL VERSUS', () => this.setupLocal()],
+      ['QUICK MATCH', () => this.quickMatch()],
+      ['CUSTOM MATCH', () => this.setupCustom()],
       ['TOURNAMENT', () => this.setupTourney()],
-      ['PRACTICE', () => this.c.startMatch({ type: 'practice' })],
+      ['LOCAL VERSUS', () => this.setupLocal()],
+      ['PRACTICE', () => this.practiceMenu()],
       null,
       ['APPEARANCE', () => this.appearance()],
-      ['STATISTICS', () => this.stats()],
+      ['RECORDS', () => this.stats()],
       ['RULES', () => this.rules()],
       ['SETTINGS', () => this.settings()],
       null,
       ['RETURN TO ROGUELITE', () => this.g.exitClassic()],
     ];
     const items = [], acts = [];
-    for (const d of defs) {
-      if (!d) { menu.appendChild(h('div', 'c-gap')); continue; }
-      const it = h('div', 'c-item' + (d[0].startsWith('RETURN') ? ' ret' : ''), d[0]);
-      menu.appendChild(it); items.push(it); acts.push(d[1]);
+    for (const d2 of defs) {
+      if (!d2) { menu.appendChild(h('div', 'c-gap')); continue; }
+      const it = h('div', 'c-item' + (d2[0].startsWith('RETURN') ? ' ret' : ''), d2[0]);
+      menu.appendChild(it); items.push(it); acts.push(d2[1]);
     }
     const keys = this.nav(items, (i) => { this.g.audio.cUi('select'); acts[i](); });
     el.querySelector('.c-ver').addEventListener('click', (e) => { e.stopPropagation(); this.g.audio.cUi('select'); this.credits(); });
@@ -143,6 +152,35 @@ export class ClassicUI {
     drawFs();
     fs.addEventListener('click', (e) => { e.stopPropagation(); this.g.setFullscreen(!document.fullscreenElement); setTimeout(drawFs, 300); });
     this.open(el, { keys });
+    this.showPendingUnlocks();
+  }
+
+  // looks unlocked by a new Classic level, said quietly
+  showPendingUnlocks() {
+    const list = (this.c.pendingUnlocks || []).splice(0);
+    list.forEach((it, i) => setTimeout(() => this.notice(`Unlocked · ${it.kind === 'room' ? 'Room' : it.kind === 'felt' ? 'Felt' : it.kind === 'cue' ? 'Cue' : 'Balls'}`, it.name.replace(/\b\w+/g, w => w[0] + w.slice(1).toLowerCase())), 400 + i * 1900));
+  }
+
+  // QUICK MATCH: pick how good, then play. Everything else is remembered.
+  quickMatch() {
+    const c = this.c, d = c.data;
+    const el = h('div', 'c-screen c-side');
+    el.innerHTML = `<div class="c-col"><div class="c-title">QUICK MATCH</div><div class="c-subt">Pick a difficulty. The next regular at the table takes you on.</div><div class="c-menu c-quick"></div></div>`;
+    const menu = el.querySelector('.c-menu');
+    const lvDesc = { easy: 'Makes mistakes. Happy to leave you shots.', normal: 'A decent club player. Pots what is in front of it.', hard: 'Plays position and spin. Will play safe.', expert: 'Plans ahead, rarely misses, controls the cue ball.' };
+    const lvls = ['easy', 'normal', 'hard', 'expert'];
+    const items = lvls.map(l => { const it = h('div', 'c-item', `${LEVELS[l].name}<small>${lvDesc[l]}</small>`); menu.appendChild(it); return it; });
+    let entry;
+    const go = (i) => {
+      const level = lvls[i];
+      d.quick.level = level;
+      // the regular you have played least goes next
+      const opp = [...OPPONENTS].sort((a, b) => ((d.rivals[a.id]?.w || 0) + (d.rivals[a.id]?.l || 0)) - ((d.rivals[b.id]?.w || 0) + (d.rivals[b.id]?.l || 0)) || Math.random() - 0.5)[0];
+      c.save();
+      c.startMatch({ type: 'ai', names: [d.names.p1], opp: opp.id, level, style: 'auto', format: d.custom.format || 'single', clock: d.custom.clock || 0, quick: true });
+    };
+    const keys = this.nav(items, (i) => { this.g.audio.cUi('select'); go(i); }, { start: Math.max(0, lvls.indexOf(d.quick.level)) });
+    entry = this.open(el, { keys: (code) => { if (code === 'Escape' || code === 'Backspace') { this.g.audio.cUi('back'); this.close(entry); return true; } return keys(code); } });
   }
 
   credits() {
@@ -234,50 +272,69 @@ export class ClassicUI {
     return { el, entry, close: () => this.close(entry) };
   }
 
-  clockRow(get, set) { return this.optRow('Shot clock', [0, 45, 30, 20], ['Off', '45 seconds', '30 seconds', '20 seconds'], get, set, 'Run out: ball in hand to your opponent'); }
+  clockRow(get, set) { return this.optRow('Shot clock', [0, 30, 45, 60], ['Off', '30 seconds', '45 seconds', '60 seconds'], get, set, 'Run out: ball in hand to your opponent'); }
+  formatRow(get, set) { return this.optRow('Match', FORMATS.map(f => f.id), FORMATS.map(f => f.name), get, set); }
 
-  setupAI() {
-    const d = this.c.data;
-    let name = d.names.p1, level = d.ai || 'normal', bestOf = d.bestOf || 1, style = d.style || 'balanced', clock = d.clock || 0;
-    const lvDesc = { easy: 'Makes mistakes. Happy to leave you shots.', normal: 'A decent club player. Pots what’s in front of it.', hard: 'Plays position and spin. Will play safe.', expert: 'Plans ahead, rarely misses, controls the cue ball.' };
-    const lvRow = this.optRow('Opponent', ['easy', 'normal', 'hard', 'expert'], ['Easy', 'Normal', 'Hard', 'Expert'], () => level, (v) => { level = v; desc.textContent = lvDesc[v]; });
-    const desc = h('div', 'c-desc', lvDesc[level]);
-    const styRow = this.optRow('Playing style', Object.keys(STYLES), Object.values(STYLES).map(x => x.name), () => style, (v) => { style = v; sdesc.textContent = STYLES[v].desc; });
-    const sdesc = h('div', 'c-desc', STYLES[style].desc);
-    const f = this.form('VS AI', [
+  // CUSTOM MATCH: who, how good, how they think, how long, and the table
+  setupCustom() {
+    const c = this.c, d = c.data, g = this.g, L = d.look, C = d.custom;
+    let name = d.names.p1;
+    const recOf = (id) => { const r = d.rivals[id]; return r ? `You ${r.w} — ${r.l}` : 'Never played'; };
+    const oppRow = this.optRow('Opponent', OPPONENTS.map(o => o.id), OPPONENTS.map(o => o.name), () => C.opp, (v) => { C.opp = v; drawOpp(); });
+    const who = h('div', 'c-who');
+    const drawOpp = () => {
+      const o = oppById(C.opp);
+      who.innerHTML = '';
+      who.appendChild(portrait(o, 44));
+      who.insertAdjacentHTML('beforeend', `<div><div class="nm">${o.name} <small>${STYLES[o.style].name}</small></div><div class="bio">${o.bio}</div><div class="rec">${recOf(o.id)}</div></div>`);
+    };
+    const styRow = this.optRow('Playing style', ['auto', ...STYLE_IDS], ['Their own', ...STYLE_IDS.map(k => STYLES[k].name)], () => C.style || 'auto', (v) => { C.style = v; sdesc.textContent = v === 'auto' ? 'How this regular usually plays.' : STYLES[v].desc; });
+    const sdesc = h('div', 'c-desc', !C.style || C.style === 'auto' ? 'How this regular usually plays.' : STYLES[C.style].desc);
+    const own = (it) => g.meta.isUnlocked(it) && (c.s.cosmetics === 'all' || it.classy || it.kind === 'room');
+    const pick = (list) => list.filter(own);
+    const rows = [
       this.inputRow('Your name', name, (v) => { name = v; }),
-      lvRow,
+      oppRow,
+      this.optRow('Difficulty', ['easy', 'normal', 'hard', 'expert'], ['Easy', 'Normal', 'Hard', 'Expert'], () => C.level, (v) => { C.level = v; }),
       styRow,
-      this.optRow('Frames', [1, 3, 5, 7], ['Single frame', 'Best of 3', 'Best of 5', 'Best of 7'], () => bestOf, (v) => { bestOf = v; }),
-      this.clockRow(() => clock, (v) => { clock = v; }),
-    ], [
+      this.formatRow(() => C.format, (v) => { C.format = v; }),
+      this.optRow('Aim guide', ['full', 'short', 'off'], ['Full', 'Short', 'Off'], () => c.s.aim, (v) => { c.s.aim = v; c.applyRender(); }),
+      this.clockRow(() => C.clock, (v) => { C.clock = v; }),
+      this.optRow('Table', pick(FELTS).map(x => x.id), pick(FELTS).map(x => tc(x.name)), () => L.felt, (v) => { L.felt = v; c.applyLook(false); }),
+      this.optRow('Room', pick(ROOMS).map(x => x.id), pick(ROOMS).map(x => x.name), () => L.room || 'lounge', (v) => { L.room = v; c.applyLook(false); }),
+      this.optRow('Cue', pick(CUES).map(x => x.id), pick(CUES).map(x => tc(x.name)), () => L.cue, (v) => { L.cue = v; c.applyLook(false); }),
+    ];
+    const f = this.form('CUSTOM MATCH', rows, [
       ['Start match', () => {
-        d.names.p1 = (name || '').trim() || 'Player'; d.ai = level; d.bestOf = bestOf; d.style = style; d.clock = clock; this.c.save();
-        this.c.startMatch({ type: 'ai', names: [d.names.p1], level, bestOf, style, clock });
+        d.names.p1 = (name || '').trim() || 'Player'; c.save();
+        c.startMatch({ type: 'ai', names: [d.names.p1], opp: C.opp, level: C.level, style: C.style, format: C.format, clock: C.clock });
       }, 'primary'],
-      ['Back', () => { this.g.audio.cUi('back'); f.close(); }],
-    ], { sub: 'Difficulty is how well it plays. Style is how it thinks.' });
+      ['Back', () => { g.audio.cUi('back'); c.save(); f.close(); }],
+    ], { sub: 'Difficulty is how well they play. Style is how they think.' });
+    f.el.classList.add('wide');
     const rowsEl = f.el.querySelector('.c-rows');
-    rowsEl.insertBefore(desc, lvRow.nextSibling);
+    rowsEl.insertBefore(who, oppRow.nextSibling);
     rowsEl.insertBefore(sdesc, styRow.nextSibling);
+    drawOpp();
   }
+  setupAI() { this.setupCustom(); }
 
   setupTourney() {
     const d = this.c.data;
-    let name = d.names.p1, level = d.ai || 'normal', bestOf = 1, clock = d.clock || 0;
+    let name = d.names.p1, level = d.custom.level || 'normal', format = 'single', clock = d.custom.clock || 0;
     const f = this.form('TOURNAMENT', [
       this.inputRow('Your name', name, (v) => { name = v; }),
       this.optRow('Field', ['easy', 'normal', 'hard', 'expert'], ['Easy', 'Normal', 'Hard', 'Expert'], () => level, (v) => { level = v; }, 'One of them is a notch better'),
-      this.optRow('Semi-final', [1, 3], ['Single frame', 'Best of 3'], () => bestOf, (v) => { bestOf = v; }, 'The final is always at least best of 3'),
+      this.optRow('Semi-final', ['single', 'bo3', 'race3'], ['Single frame', 'Best of 3', 'Race to 3'], () => format, (v) => { format = v; }, 'The final is always at least best of 3'),
       this.clockRow(() => clock, (v) => { clock = v; }),
     ], [
       ['Draw the bracket', () => {
         d.names.p1 = (name || '').trim() || 'Player'; this.c.save();
         this.closeAll();
-        this.c.startTourney({ names: [d.names.p1], level, bestOf, clock });
+        this.c.startTourney({ names: [d.names.p1], level, format, clock });
       }, 'primary'],
       ['Back', () => { this.g.audio.cUi('back'); f.close(); }],
-    ], { sub: 'Four players. Two semi-finals. One final.' });
+    ], { sub: `Four players. Two semi-finals. One final. ${d.stats.tourneys ? `You have won ${d.stats.tourneys}.` : 'Win it for a trophy.'}` });
   }
 
   // the draw, before and after each round
@@ -287,11 +344,12 @@ export class ClassicUI {
     const g = this.g, f = T.field;
     g.state = 'cmenu';
     g.camMode = 'lounge';
-    const nm = (i) => (i == null ? '—' : esc(f[i].name) + (f[i].you ? '' : ` <small>${LEVELS[f[i].level].name[0] + LEVELS[f[i].level].name.slice(1).toLowerCase()} · ${STYLES[f[i].style].name}</small>`));
+    const nm = (i) => (i == null ? '—' : esc(f[i].name) + (f[i].you ? '' : ` <small>${LEVELS[f[i].level].name[0] + LEVELS[f[i].level].name.slice(1).toLowerCase()} · ${STYLES[f[i].style]?.name || ''}</small>`));
     const win = (i) => (i != null && (T.winners.includes(i) || T.champion === i) ? ' won' : '');
     const title = T.round === 'semi' ? 'The draw' : T.round === 'final' ? 'The final' : T.champion === 0 ? 'Champion' : 'Knocked out';
     const el = h('div', 'c-screen c-side');
     el.innerHTML = `<div class="c-col"><div class="c-title">${title.toUpperCase()}</div>${reason ? `<div class="c-subt">${esc(reason)}</div>` : ''}
+      ${T.round === 'done' && T.champion === 0 ? '<div class="c-trophy"><i></i><b></b><span></span></div>' : ''}
       <div class="c-bracket">
         <div class="rd"><div class="lbl">Semi-final</div><div class="m"><div class="pl${win(0)}">${nm(0)}</div><div class="pl${win(1)}">${nm(1)}</div></div><div class="m"><div class="pl${win(2)}">${nm(2)}</div><div class="pl${win(3)}">${nm(3)}</div></div></div>
         <div class="rd"><div class="lbl">Final</div><div class="m"><div class="pl${T.champion === T.winners[0] && T.champion != null ? ' won' : ''}">${nm(T.winners[0])}</div><div class="pl${T.champion === T.winners[1] && T.champion != null ? ' won' : ''}">${nm(T.winners[1])}</div></div></div>
@@ -309,19 +367,32 @@ export class ClassicUI {
 
   setupLocal() {
     const d = this.c.data;
-    let n1 = d.names.p1, n2 = d.names.p2, bestOf = d.bestOf || 1, clock = d.clock || 0;
+    let n1 = d.names.p1, n2 = d.names.p2, format = d.custom.format || 'single', clock = d.custom.clock || 0;
     const f = this.form('LOCAL VERSUS', [
       this.inputRow('Player 1', n1, (v) => { n1 = v; }),
       this.inputRow('Player 2', n2, (v) => { n2 = v; }),
-      this.optRow('Frames', [1, 3, 5, 7], ['Single frame', 'Best of 3', 'Best of 5', 'Best of 7'], () => bestOf, (v) => { bestOf = v; }),
+      this.formatRow(() => format, (v) => { format = v; }),
       this.clockRow(() => clock, (v) => { clock = v; }),
     ], [
       ['Start match', () => {
-        d.names.p1 = (n1 || '').trim() || 'Player 1'; d.names.p2 = (n2 || '').trim() || 'Player 2'; d.bestOf = bestOf; d.clock = clock; this.c.save();
-        this.c.startMatch({ type: 'local', names: [d.names.p1, d.names.p2], bestOf, clock });
+        d.names.p1 = (n1 || '').trim() || 'Player 1'; d.names.p2 = (n2 || '').trim() || 'Player 2'; this.c.save();
+        this.c.startMatch({ type: 'local', names: [d.names.p1, d.names.p2], format, clock });
       }, 'primary'],
       ['Back', () => { this.g.audio.cUi('back'); f.close(); }],
     ], { sub: 'Same table, same mouse. Take turns.' });
+  }
+
+  // PRACTICE: free play, or a challenge with a best score to beat
+  practiceMenu() {
+    const c = this.c, d = c.data;
+    const el = h('div', 'c-screen c-side');
+    el.innerHTML = `<div class="c-col"><div class="c-title">PRACTICE</div><div class="c-subt">Normal table, normal physics. Just you.</div><div class="c-menu c-quick"></div></div>`;
+    const menu = el.querySelector('.c-menu');
+    const defs = [['FREE PRACTICE', 'Rack, drills, undo. No score.', null], ...DRILL_IDS.map(id => [DRILLS[id].name.toUpperCase(), `${DRILLS[id].desc}${d.drills[id] ? ` · Best ${d.drills[id]} ${DRILLS[id].unit}` : ''}`, id])];
+    const items = defs.map(([t, sub]) => { const it = h('div', 'c-item', `${t}<small>${sub}</small>`); menu.appendChild(it); return it; });
+    let entry;
+    const keys = this.nav(items, (i) => { this.g.audio.cUi('select'); c.startMatch({ type: 'practice', drill: defs[i][2] }); });
+    entry = this.open(el, { keys: (code) => { if (code === 'Escape' || code === 'Backspace') { this.g.audio.cUi('back'); this.close(entry); return true; } return keys(code); } });
   }
 
   settings() {
@@ -334,7 +405,8 @@ export class ClassicUI {
       onoff('reflections', 'Reflections'),
       onoff('aa', 'Anti-aliasing'),
       this.optRow('Aim guide', ['full', 'short', 'off'], ['Full', 'Short', 'Off'], () => s.aim, (v) => { s.aim = v; apply(); }),
-      this.optRow('Camera', ['3d', 'top'], ['3D', 'Top down'], () => s.camera, (v) => { s.camera = v; this.g.camStyle = v === 'top' ? 'top' : 'cinematic'; apply(); }, 'C to switch'),
+      this.optRow('Camera', ['3d', 'top', 'cue'], ['3D', 'Top down', 'Cue view'], () => s.camera, (v) => { s.camera = v; this.g.camStyle = v === 'top' ? 'top' : v === 'cue' ? 'cue' : 'cinematic'; apply(); }, 'C to switch'),
+      onoff('follow', 'Follow shot', 'The camera rides behind the cue ball'),
       onoff('ambience', 'Room ambience'),
       this.sliderRow('Music', () => s.music, (v) => { s.music = v; apply(); }),
       this.sliderRow('Effects', () => s.sfx, (v) => { s.sfx = v; apply(); }),
@@ -347,40 +419,54 @@ export class ClassicUI {
     f.el.querySelector('.c-rows').classList.add('two');
   }
 
+  // APPEARANCE: Classic keeps to classy things unless you say otherwise
   appearance() {
-    const c = this.c, L = c.data.look;
-    const g = this.g;
+    const c = this.c, L = c.data.look, g = this.g;
     const prev = g.camMode;
     g.camMode = 'showcase';
-    const set = (k, v) => { L[k] = v; c.save(); if (k === 'light') c.applyLook(false); else if (k === 'felt') c.applyLook(false); else if (k === 'balls') { c.applyLook(false); } else c.applyLook(false); };
-    const f = this.form('APPEARANCE', [
-      this.optRow('Felt', FELTS.map(x => x.id), FELTS.map(x => x.name), () => L.felt, (v) => set('felt', v)),
-      this.optRow('Cue', CUES.map(x => x.id), CUES.map(x => (x.ach && !g.meta.data.achievements[x.ach] ? `${x.name} (locked)` : x.name)), () => L.cue, (v) => {
-        const c = CUES.find(x => x.id === v);
-        if (c.ach && !g.meta.data.achievements[c.ach]) { L.cue = v; c.lockedPreview = true; }
-        set('cue', v);
-      }, 'Ebony: beat the Expert AI · Gold Inlay: win a tournament'),
-      this.optRow('Balls', BALLS.map(x => x.id), BALLS.map(x => x.name), () => L.balls, (v) => set('balls', v)),
-      this.optRow('Lighting', LIGHTS.map(x => x.id), LIGHTS.map(x => x.name), () => L.light, (v) => set('light', v)),
-      this.optRow('Room', ROOMS.map(x => x.id), ROOMS.map(x => x.name), () => L.room || 'lounge', (v) => set('room', v)),
-    ], [['Done', () => { g.audio.cUi('back'); g.camMode = prev; f.close(); }]], {
-      sub: 'Changes show on the table.',
-      back: () => { g.audio.cUi('back'); g.camMode = prev; f.close(); },
-    });
+    const set = (k, v) => { L[k] = v; c.save(); c.applyLook(false); };
+    const opts = (list, kind) => list.filter(it => g.meta.visible(it) && (c.s.cosmetics === 'all' || it.classy || kind === 'room' || kind === 'light'));
+    const lab = (it) => (g.meta.isUnlocked({ ...it, kind: it.kind }) ? tc(it.name) : `${tc(it.name)} (${lockWhy(it)})`);
+    const lockWhy = (it) => { const t = g.meta.unlockText(it); return t.startsWith('CLASSIC') ? `Classic level ${it.unlock.clevel}` : t === 'A SECRET' ? 'secret' : 'locked'; };
+    const guard = (list, k) => (v) => { const it = list.find(x => x.id === v); if (it && !g.meta.isUnlocked(it)) { g.audio.cUi('deny'); this.notice('Locked', `${tc(it.name)} · ${lockWhy(it)}`, 'soft'); return; } set(k, v); };
+    let f;
+    const build = () => {
+      const felts = opts(FELTS, 'felt'), cues = opts(CUES, 'cue'), balls = opts(BALLS, 'ball'), trails = opts(TRAILS, 'trail'), pockets = opts(POCKET_FX, 'pocket');
+      const rows = [
+        this.optRow('Cosmetics', ['classic', 'all'], ['Classic only', 'All compatible'], () => c.s.cosmetics, (v) => { c.s.cosmetics = v; c.save(); f.close(); build(); }, 'All compatible adds your roguelite unlocks'),
+        this.optRow('Felt', felts.map(x => x.id), felts.map(lab), () => L.felt, guard(felts, 'felt')),
+        this.optRow('Cue', cues.map(x => x.id), cues.map(lab), () => L.cue, guard(cues, 'cue')),
+        this.optRow('Balls', balls.map(x => x.id), balls.map(lab), () => L.balls, guard(balls, 'balls')),
+        this.optRow('Lighting', LIGHTS.map(x => x.id), LIGHTS.map(x => x.name), () => L.light, (v) => set('light', v)),
+        this.optRow('Room', ROOMS.map(x => x.id), ROOMS.map(lab), () => L.room || 'lounge', guard(ROOMS, 'room')),
+        this.optRow('Shot trail', trails.map(x => x.id), trails.map(lab), () => L.trail || 'off', guard(trails, 'trail')),
+        this.optRow('Pocket effect', pockets.map(x => x.id), pockets.map(lab), () => L.pocket || 'quiet', guard(pockets, 'pocket')),
+      ];
+      f = this.form('APPEARANCE', rows, [['Done', () => { g.audio.cUi('back'); g.camMode = prev; f.close(); }]], {
+        sub: 'Changes show on the table.',
+        back: () => { g.audio.cUi('back'); g.camMode = prev; f.close(); },
+      });
+    };
+    build();
   }
 
+  // RECORDS
   stats() {
-    const st = this.c.data.stats;
+    const d = this.c.data, st = d.stats;
     const el = h('div', 'c-screen c-side');
     const pct = st.played ? Math.round(st.won / st.played * 100) : 0;
+    const hrs = st.playtime || 0, time = hrs >= 3600 ? `${Math.floor(hrs / 3600)}h ${Math.floor(hrs % 3600 / 60)}m` : `${Math.floor(hrs / 60)}m`;
     const rows = [
-      ['Matches played', st.played], ['Matches won', `${st.won}${st.played ? `  <small>${pct}%</small>` : ''}`], ['Current streak', st.streak], ['Best win streak', st.bestStreak],
-      ['Frames played', st.frames], ['Frames won vs AI', st.framesWon || 0], ['Break and runs', st.breakRuns], ['Best run in one visit', st.highRun ? `${st.highRun} ball${st.highRun === 1 ? '' : 's'}` : '—'],
-      ['Balls potted', st.potted], ['Longest pot', st.longest ? `${st.longest.toFixed(2)} m` : '—'], ['Fouls', st.fouls || 0], ['Shot clock violations', st.clockFouls || 0],
-      ['Tournaments won', `${st.tourneys || 0}${st.tourneysPlayed ? ` <small>of ${st.tourneysPlayed}</small>` : ''}`], ['Local matches', st.localMatches],
+      ['Matches', st.played], ['Wins', st.won], ['Win rate', st.played ? `${pct}%` : '—'], ['Current streak', st.streak], ['Best streak', st.bestStreak],
+      ['Expert wins', st.aiWins.expert || 0], ['Tournaments won', `${st.tourneys || 0}${st.tourneysPlayed ? ` <small>of ${st.tourneysPlayed}</small>` : ''}`],
+      ['Balls potted', st.potted], ['Break and runs', st.breakRuns], ['Bank shots', st.banks || 0], ['Good safeties', st.safeties || 0],
+      ['Longest pot', st.longest ? `${st.longest.toFixed(2)} m` : '—'], ['Best visit', st.highRun ? `${st.highRun} ball${st.highRun === 1 ? '' : 's'}` : '—'],
+      ['Fouls', st.fouls || 0], ['Shot clock violations', st.clockFouls || 0], ['Frames', st.frames], ['Local matches', st.localMatches], ['Time at the table', time],
     ];
-    const lv = ['easy', 'normal', 'hard', 'expert'].map(k => `<div><span>${LEVELS[k].name[0] + LEVELS[k].name.slice(1).toLowerCase()}</span><b>${st.aiWins[k] || 0}</b></div>`).join('');
-    el.innerHTML = `<div class="c-col"><div class="c-title">STATISTICS</div><div class="c-stats">${rows.map(([k, v]) => `<div class="k">${k}</div><div class="v">${v}</div>`).join('')}</div><div class="c-subh">Wins against the AI</div><div class="c-lv">${lv}</div><div class="c-btns"><div class="c-btn sel">Back</div></div></div>`;
+    const riv = OPPONENTS.filter(o => d.rivals[o.id]).map(o => `<div class="c-rv">${portrait(o, 18).outerHTML.replace('<canvas', '<canvas data-o="' + o.id + '"')}<span>${o.name}</span><b>${d.rivals[o.id].w} — ${d.rivals[o.id].l}</b></div>`).join('');
+    el.innerHTML = `<div class="c-col c-wide"><div class="c-title">RECORDS</div><div class="c-subt">Classic level ${d.level}</div><div class="c-stats">${rows.map(([k, v]) => `<div class="k">${k}</div><div class="v">${v}</div>`).join('')}</div>${riv ? `<div class="c-subh">Against the regulars</div><div class="c-rivals">${riv}</div>` : ''}<div class="c-btns"><div class="c-btn sel">Back</div></div></div>`;
+    // portraits drawn as canvases need repainting after the HTML round trip
+    el.querySelectorAll('canvas[data-o]').forEach(cv => { const p = portrait(oppById(cv.dataset.o), 18); cv.replaceWith(p); });
     let entry;
     const back = () => { this.g.audio.cUi('back'); this.close(entry); };
     el.querySelector('.c-btn').addEventListener('click', back);
@@ -444,15 +530,34 @@ export class ClassicUI {
   }
 
   // ---------------------------------------------------------- match moments
+  // "I'm entering a match": the names, the faces, the record, the format
   matchIntro(m, cb) {
     const el = h('div', 'c-intro');
-    const p = m.players;
-    el.innerHTML = `<div class="b">SCRATCH</div><div class="t">8-Ball</div><div class="p">${esc(p[0].name)}</div><div class="vs">vs</div><div class="p">${esc(p[1].name)}</div>${m.bestOf > 1 ? `<div class="bo">Best of ${m.bestOf}</div>` : ''}`;
+    const p = m.players, d = this.c.data;
+    const fmt = formatById(m.format);
+    const sub = m.opp ? `${LEVELS[m.level].name[0] + LEVELS[m.level].name.slice(1).toLowerCase()} · ${STYLES[p[1].style]?.name || ''}` : '';
+    const r = m.opp ? d.rivals[m.opp.id] : null;
+    el.innerHTML = `<div class="b">SCRATCH</div><div class="t">8-Ball</div>
+      <div class="vsrow"><div class="side"><div class="p">${esc(p[0].name)}</div></div><div class="vs">vs</div><div class="side opp"><div class="pp"></div><div class="p">${esc(p[1].name)}</div>${sub ? `<div class="sub">${sub}</div>` : ''}</div></div>
+      ${r ? `<div class="rec">You ${r.w} — ${r.l} ${esc(p[1].name)}</div>` : m.opp ? '<div class="rec">First meeting</div>' : ''}
+      ${m.need > 1 ? `<div class="bo">${fmt.name}</div>` : ''}${m.tourney ? `<div class="bo">${m.tourney.round === 'final' ? 'The final' : 'Semi-final'}</div>` : ''}`;
+    if (m.opp) el.querySelector('.pp').appendChild(portrait(m.opp, 40));
     this.layer.appendChild(el);
     this.g.audio.cUi('select');
     requestAnimationFrame(() => el.classList.add('in'));
-    setTimeout(() => { el.classList.remove('in'); el.classList.add('out'); }, 1900);
-    setTimeout(() => { el.remove(); cb(); }, 2400);
+    setTimeout(() => { el.classList.remove('in'); el.classList.add('out'); }, 2300);
+    setTimeout(() => { el.remove(); cb(); }, 2800);
+  }
+
+  // the first Classic match ever: four lines, then play
+  firstTime(go) {
+    const el = h('div', 'c-screen c-center c-dim');
+    el.innerHTML = `<div class="c-first"><div class="k">SCRATCH CLASSIC</div><div class="l">Normal 8-ball.</div><div class="l">Solids or stripes.</div><div class="l">Clear your group.</div><div class="l">Pot the 8 last.</div><div class="h">Click to play</div></div>`;
+    let entry, done = false;
+    const fin = () => { if (done) return; done = true; this.close(entry); go(); };
+    el.addEventListener('click', fin);
+    entry = this.open(el, { keys: () => { fin(); return true; } });
+    setTimeout(fin, 6000);
   }
 
   frameResult(title, reason, wins) {
@@ -464,17 +569,61 @@ export class ClassicUI {
   }
 
   matchEnd(info) {
-    const c = this.c;
+    const c = this.c, g = this.g;
     const el = h('div', 'c-screen c-end');
-    el.innerHTML = `<div class="c-endbox"><div class="t">${esc(info.title)}</div><div class="r">${esc(info.reason)}</div>${info.score ? `<div class="s">${esc(info.players[0].name)} <b>${info.score[0]}</b> — <b>${info.score[1]}</b> ${esc(info.players[1].name)}</div>` : ''}<div class="c-btns row"></div></div>`;
+    const S = info.stats || [{}, {}];
+    const avg = (x) => (x.shots ? `${(x.shotTime / x.shots).toFixed(1)} s` : '—');
+    const rows = [['Pots', 'pots'], ['Fouls', 'fouls'], ['Banks', 'banks'], ['Longest pot', 'longest'], ['Safeties', 'safeties'], ['Average shot', 'avg']]
+      .map(([k, f]) => `<div class="a">${f === 'avg' ? avg(S[0]) : f === 'longest' ? (S[0].longest ? `${S[0].longest.toFixed(2)} m` : '—') : S[0][f] ?? 0}</div><div class="k">${k}</div><div class="a">${f === 'avg' ? avg(S[1]) : f === 'longest' ? (S[1].longest ? `${S[1].longest.toFixed(2)} m` : '—') : S[1][f] ?? 0}</div>`).join('');
+    const lv = info.lv;
+    el.innerHTML = `<div class="c-endbox wide"><div class="t">${esc(info.title)}</div>${info.score ? `<div class="s">${info.score[0]} — ${info.score[1]}</div>` : ''}<div class="r">${esc(info.reason)}</div>
+      <div class="c-mstats"><div class="h">${esc(info.players[0].name)}</div><div></div><div class="h">${esc(info.players[1].name)}</div>${rows}</div>
+      ${info.rec ? `<div class="c-recline">You ${info.rec.w} — ${info.rec.l} ${esc(info.players[1].name)}${info.streak ? ` · Win streak ${info.streak}` : ''}</div>` : ''}
+      ${lv ? `<div class="c-xp"><span>Classic level ${lv.to}${lv.to > lv.from ? ' · <b>level up</b>' : ''}</span><i><b style="width:${Math.min(100, lv.xp / lv.need * 100)}%"></b></i><span>+${info.xp} XP</span></div>` : ''}
+      <div class="c-btns row"></div></div>`;
     const row = el.querySelector('.c-btns');
-    const defs = [['Rematch', () => c.rematch()], ['Main menu', () => c.toMenu()], ['Return to roguelite', () => this.g.exitClassic()]];
+    const m = c.match;
+    const defs = [['Rematch', () => c.rematch()], m?.type === 'ai' && !m.tourney ? ['Change opponent', () => { c.toMenu(); this.setupCustom(); }] : null, ['Classic menu', () => c.toMenu()]].filter(Boolean);
     const items = defs.map(([t]) => { const b = h('div', 'c-btn' + (t === 'Rematch' ? ' primary' : ''), t === 'Rematch' ? 'Rematch <small>R</small>' : t); row.appendChild(b); return b; });
     let entry;
-    const nav = this.nav(items, (i) => { this.g.audio.cUi('select'); this.close(entry); defs[i][1](); });
+    const nav = this.nav(items, (i) => { g.audio.cUi('select'); this.close(entry); defs[i][1](); });
     setTimeout(() => {
-      entry = this.open(el, { keys: (code) => { if (code === 'KeyR') { this.g.audio.cUi('select'); this.close(entry); c.rematch(); return true; } if (code === 'ArrowLeft') return nav('ArrowUp'); if (code === 'ArrowRight') return nav('ArrowDown'); return nav(code); } });
+      entry = this.open(el, { keys: (code) => { if (code === 'KeyR') { g.audio.cUi('select'); this.close(entry); c.rematch(); return true; } if (code === 'ArrowLeft') return nav('ArrowUp'); if (code === 'ArrowRight') return nav('ArrowDown'); return nav(code); } });
+      this.showPendingUnlocks();
     }, 900);
+  }
+
+  // a subtle name for a good shot: BANK · LONG POT
+  shotLabel(labels, good = false) {
+    this.layer.querySelectorAll('.c-shot').forEach(n => n.remove());
+    const el = h('div', 'c-shot' + (good ? ' good' : ''), labels.map(esc).join('<i>·</i>'));
+    this.layer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('in'));
+    setTimeout(() => { el.classList.remove('in'); setTimeout(() => el.remove(), 600); }, 1700);
+    this.g.audio.cUi('move');
+  }
+
+  breakAndRun() {
+    const el = h('div', 'c-bnr', '<div class="t">Break &amp; Run</div><div class="r">The whole rack, one visit.</div>');
+    this.layer.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('in'));
+    this.g.audio.cWin();
+    setTimeout(() => { el.classList.remove('in'); setTimeout(() => el.remove(), 800); }, 2000);
+  }
+
+  drillCard(D, best) {
+    this.notice(D.name, `${D.desc}${best ? ` Best: ${best} ${D.unit}.` : ''}`, 'soft');
+  }
+  drillResult(D, d, best, isBest, say) {
+    const c = this.c, g = this.g;
+    const el = h('div', 'c-screen c-center c-dim');
+    el.innerHTML = `<div class="c-dialog"><div class="c-title sm">${esc(D.name)}</div><div class="c-text">${esc(say)}</div><div class="c-drill"><b>${d.score}</b> ${D.unit}${isBest ? '<span>New best</span>' : `<small>Best ${best}</small>`}</div><div class="c-btns row"></div></div>`;
+    const row = el.querySelector('.c-btns');
+    const defs = [[d.id === 'break' ? 'Rerack <small>R</small>' : 'Again <small>R</small>', () => c.startDrill(d.id)], ['Practice menu', () => { c.toMenu(); this.practiceMenu(); }]];
+    const items = defs.map(([t], i) => { const b = h('div', 'c-btn' + (i === 0 ? ' primary' : ''), t); row.appendChild(b); return b; });
+    let entry;
+    const nav = this.nav(items, (i) => { g.audio.cUi('select'); this.close(entry, true); defs[i][1](); });
+    entry = this.open(el, { keys: (code) => { if (code === 'KeyR' || code === 'KeyN') { this.close(entry, true); c.startDrill(d.id); return true; } if (code === 'Escape') { this.close(entry, true); c.toMenu(); this.practiceMenu(); return true; } if (code === 'ArrowLeft') return nav('ArrowUp'); if (code === 'ArrowRight') return nav('ArrowDown'); return nav(code); } });
   }
 
   // ---------------------------------------------------------- HUD
@@ -518,7 +667,13 @@ export class ClassicUI {
     const prac = m.type === 'practice';
     this.hx.board.style.display = prac ? 'none' : '';
     this.hx.practice.style.display = prac ? '' : 'none';
-    if (prac) { this.hx.ly.textContent = { rack: 'Full rack', banks: 'Bank drill', spin: 'Cue ball control' }[m.layout] || ''; return; }
+    if (prac) {
+      const dr = m.drill && DRILLS[m.drill.id];
+      this.hx.ly.textContent = dr ? `${dr.name} · ${m.drill.score} ${dr.unit}${dr.tries ? ` · ${Math.max(0, dr.tries - m.drill.tries)} left` : ''}` : { rack: 'Full rack', banks: 'Bank drill', spin: 'Cue ball control' }[m.layout] || '';
+      this.hx.practice.querySelector('.t').textContent = dr ? 'Practice challenge' : 'Practice';
+      this.hx.practice.querySelector('.keys').style.display = dr ? 'none' : '';
+      return;
+    }
     const on = this.c.onTableSet();
     m.players.forEach((p, i) => {
       const el = this.hx.p[i];
@@ -533,8 +688,8 @@ export class ClassicUI {
         pips.innerHTML = nums.map(n => `<i class="${on.has(n) ? '' : 'off'}" style="${pipStyle(n)}"></i>`).join('') + (nums.length && nums.every(n => !on.has(n)) ? `<i class="eight" style="${pipStyle(8)}"></i>` : '');
       }
     });
-    this.hx.fr.textContent = m.bestOf > 1 ? `${m.wins[0]} — ${m.wins[1]}` : '';
-    this.hx.lbl.textContent = m.bestOf > 1 ? `Best of ${m.bestOf}` : '8-Ball';
+    this.hx.fr.textContent = m.need > 1 ? `${m.wins[0]} — ${m.wins[1]}` : '';
+    this.hx.lbl.textContent = m.need > 1 ? formatById(m.format).short : '8-Ball';
   }
 
   update(dt) {
@@ -569,11 +724,12 @@ export class ClassicUI {
 
   hint(text) { this.hx.hint.textContent = text; }
 
-  banner(text) {
+  banner(text, ms = 1500, cb = null) {
     const el = h('div', 'c-banner', esc(text));
     this.layer.appendChild(el);
     requestAnimationFrame(() => el.classList.add('in'));
-    setTimeout(() => { el.classList.remove('in'); setTimeout(() => el.remove(), 700); }, 1500);
+    setTimeout(() => { el.classList.remove('in'); setTimeout(() => el.remove(), 700); }, ms);
+    if (cb) setTimeout(cb, ms * 0.6);
   }
 
   notice(title, text = '', kind = '') {

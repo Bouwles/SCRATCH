@@ -1,6 +1,6 @@
 # SCRATCH — Attributions and rights audit
 
-SCRATCH v2.0.0 (AFTERHOURS) was created by **Paul Nercessian**.
+SCRATCH v2.1.0 (AFTERHOURS) was created by **Paul Nercessian**.
 
 This file lists everything in the shipped game that was not written for it, and
 how each piece may be redistributed. Full licence texts ship inside the web

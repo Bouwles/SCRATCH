@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { TABLE } from '../config.js';
 import { ps1Material } from '../render/materials.js';
-import { cueTexture } from '../render/textures.js';
+import { cueTexture, canvas, toTex } from '../render/textures.js';
 
 const R = TABLE.R;
 const CUE_LEN = 1.45;
@@ -48,6 +48,22 @@ export class Cue {
     this.mesh.material.uniforms?.map?.value?.dispose();
     this.mesh.material.dispose();
     this.mesh.material = mat;
+    // animated cues: a slow scroll, a pulse, or a glint that runs down the shaft
+    this.anim = skin.anim || null;
+    this.baseEmit = m.emissive || 0;
+    if (this.glint) { this.mesh.remove(this.glint); this.glint.material.dispose(); this.glint = null; }
+    if (this.anim?.kind === 'scroll') { tex.wrapT = THREE.RepeatWrapping; tex.needsUpdate = true; mat.uniforms.uUvScroll.value.set(0, this.anim.v); }
+    if (this.anim?.kind === 'glint') {
+      const c = canvas(4, 64), x = c.getContext('2d');
+      const g = x.createLinearGradient(0, 0, 0, 64);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.45, 'rgba(0,0,0,0)'); g.addColorStop(0.5, '#ffffff'); g.addColorStop(0.55, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.fillRect(0, 0, 4, 64);
+      const gt = toTex(c, { linear: true });
+      const gm = ps1Material({ map: gt, color: this.anim.color ?? 0xffffff, additive: true, unlit: true, fog: 0, scroll: [0, this.anim.speed], affine: 0 });
+      this.glint = new THREE.Mesh(this.mesh.geometry, gm);
+      this.glint.scale.set(1, 1.04, 1.04);
+      this.mesh.add(this.glint);
+    }
   }
 
   // place the cue behind (x,z) aiming along angle, pulled back by `pull`
@@ -60,8 +76,11 @@ export class Cue {
   }
 
   update(dt, t) {
-    if (this.skin?.mat?.glitch) {
-      this.mesh.position.z = Math.random() < 0.05 ? (Math.random() - 0.5) * 0.01 : 0;
+    const a = this.anim;
+    if (a?.kind === 'pulse') {
+      let k = 1 + Math.sin(t * a.speed) * a.amt;
+      if (a.flicker && Math.random() < 0.06) k += 0.5;
+      this.mesh.material.uniforms.uEmissive.value.setScalar(this.baseEmit * k);
     }
     this.group.visible = this.visible;
   }

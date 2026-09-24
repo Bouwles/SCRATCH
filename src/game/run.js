@@ -523,11 +523,14 @@ export const RunMixin = {
     this.ballView.prune();
     this.applyRules();
     run.lastType = def.id;
+    if (!def.boss) this.maybeRajisClue(e);          // rarely, something small and wrong
     this.state = 'intro';
     this.cue.visible = false;
     this.aim.hide();
+    this.ui.encHold(true);                        // the bar arrives after the intro
     const go = () => {
       this.ui.showHUD(true);
+      if (this.ui.eb?.classList.contains('hold')) this.ui.encArrive();
       this.audio.flavor = (run.floor - 1) % 3;              // each floor's tables sound different
       this.audio.playMusic(this.tableMusic(def));
       this.beginAim();
@@ -608,7 +611,8 @@ export const RunMixin = {
       const x = (Math.random() - 0.5) * 1.6, z = (Math.random() - 0.5) * 0.8;
       this.fx.burst(x, 0.3, z, [0xff2bd6, 0x2bf0ff, 0xffe23b, 0x34e070], 30, 1.6, { up: 2, life: 1.4, grav: 2.5 });
     });
-    this.ui.popup(e.def.boss ? 'BOSS DEFEATED!' : e.kind === 'trickshot' ? 'SOLVED!' : 'TABLE CLEARED!', { color: e.def.boss ? '#ffc21c' : '#34e070', scale: 2.0 });
+    this.ui.encResolve(true);
+    if (run.mode === 'rajis' && e.issuedBy) this.after(0.9, () => this.ui.rajisComms(e.issuedBy, this.ui.rajisStaff(e.issuedBy).won));
     if (e.def.boss) {
       this.freeze(0.18);
       this.audio.bigHit(3);
@@ -667,7 +671,12 @@ export const RunMixin = {
     const run = this.run;
     if (!pay.paid) { pay.paid = true; this.addChips(pay.total); if (pay.boss) this.heal(1); this.saveRun(); }
     if (pay.boss && run.mode === 'rajis') { this.rajisBossDone?.(pay); return; }
-    if (pay.boss && run.after) { run.afterWon = true; this.endRun(true); return; }
+    if (pay.boss && run.after) {
+      run.afterWon = true;
+      // a hot enough closing time sometimes ends with a missile warning
+      if (!this.meta.data.rajis?.found && (run.heatMax || 0) >= 4 && run.mode !== 'daily') { this.meta.data.rajis.how = 'owner'; this.ui.rajisFound(() => this.endRun(true)); return; }
+      this.endRun(true); return;
+    }
     if (pay.boss && run.floor === 3 && !run.endless) {
       // closing time: some runs are not over when the House falls
       if (this.afterhoursEligible()) { this.offerRelics('boss', pay.bonus, () => this.enterAfterhours()); return; }
@@ -691,7 +700,8 @@ export const RunMixin = {
     this.aim.hide();
     this.audio.fail();
     this.audio.groan();
-    this.ui.popup(reason, { color: '#ff3040', scale: 1.8 });
+    this.ui.encResolve(false, reason);
+    if (this.run.mode === 'rajis' && e.issuedBy) this.after(0.9, () => this.ui.rajisComms(e.issuedBy, this.ui.rajisStaff(e.issuedBy).lost));
     this.coolHeat(0.6);
     e.anomaly?.cleanup?.(this);
     this.finishTable(e, false);
@@ -827,7 +837,8 @@ export const RunMixin = {
         else if (item.type === 'maxheart') { run.maxHearts++; this.heal(1); this.ui.toast('+1 MAX HEART', '#ff3b5c', 'VITALITY'); }
         else if (item.type === 'cosmetic') {
           this.meta.buyCosmetic(item.cos.item);
-          this.ui.toast(`${item.cos.item.name} UNLOCKED`, '#ffc21c', item.cos.kind === 'ball' ? 'BALL SET' : 'CUE');
+          this.ui.toast(`${item.cos.item.name} UNLOCKED`, '#ffc21c', { ball: 'BALL SET', cue: 'CUE', felt: 'FELT' }[item.cos.kind] || 'COSMETIC');
+          this.ui.queueUnlocks([item.cos.item]);
         }
         this.ui.updateHUD(true);
         return true;
@@ -1277,6 +1288,7 @@ export const RunMixin = {
   // boss phases: the table escalates as you close in on it
   bossPhase(n) {
     const e = this.enc, def = e.def;
+    e.holdUntil = this.time + 1.0;               // a beat to read the new rules before the next shot
     this.ui.bossPhase(def, n, def.phases?.[n - 1] || '');
     this.audio.bossPhase(n);
     this.shake(0.45);

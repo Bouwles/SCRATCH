@@ -4,14 +4,17 @@
 import './style.css';
 import { RELICS, RARITY, relicById, MAX_RELICS, TAG_COLORS } from '../game/relics.js';
 import { ACHIEVEMENTS, xpForLevel, STARTER_RELICS } from '../game/meta.js';
-import { THEMES, BALL_SKINS, CUE_SKINS } from '../game/cosmetics.js';
+import { THEMES, BALL_SKINS, CUE_SKINS, COSMETICS, KIND_NAME } from '../game/cosmetics.js';
 import { ballColor } from '../config.js';
 import { floorName } from '../game/run.js';
-import { relicIcon, achIcon, glyph, glyphHTML, glyphURL, setArtMode } from './art.js';
+import { relicIcon, achIcon, glyph, glyphHTML, glyphURL, setArtMode, portraitIcon } from './art.js';
 import { STYLE_GRADES, STYLE_COL, ROMAN, HEAT_DESC, styleGrade, styleProgress, heatProgress, stakeText, ANOMALIES, SECRET_ANOMALY } from '../game/mastery.js';
 import { BOSSES } from '../game/encounters.js';
 import { GAME_VERSION, UPDATE_NAME } from '../game/meta.js';
 import { AfterUI } from './AfterUI.js';
+import { objectiveInfo, endText } from '../game/objectives.js';
+import { EncounterUI } from './EncounterUI.js';
+import { LoadoutUI, cosmeticThumb } from './LoadoutUI.js';
 import { SYNERGIES, RIVALS, rivalById, buildName, handicapMul } from '../game/afterhours.js';
 import { MISSIONS, LOCATIONS } from '../game/rajis.js';
 
@@ -49,29 +52,8 @@ const fmt = (n) => Math.round(n).toLocaleString('en-US');
 function heartIcon(full) { const i = glyph(full ? 'heart' : 'heartOff'); i.classList.add('heart'); return i; }
 const CHIP = () => glyphHTML('chip', 'chip-ico');
 
-// little pixel preview of a cosmetic for shop cards
-function cosmeticPreview(cos) {
-  const c = document.createElement('canvas');
-  c.width = 16; c.height = 16; c.className = 'px-icon';
-  const x = c.getContext('2d');
-  if (cos.kind === 'ball') {
-    const col = cos.item.tex.color || ballColor;
-    [[4, 4, 1], [11, 4, 3], [4, 11, 8], [11, 11, 6]].forEach(([cx, cy, n]) => {
-      x.fillStyle = '#000'; x.beginPath(); x.arc(cx, cy, 3.6, 0, 7); x.fill();
-      x.fillStyle = col(n); x.beginPath(); x.arc(cx, cy, 3, 0, 7); x.fill();
-      x.fillStyle = 'rgba(255,255,255,0.8)'; x.fillRect(cx - 2, cy - 2, 1, 1);
-    });
-  } else {
-    const tmp = document.createElement('canvas'); tmp.width = 16; tmp.height = 256;
-    cos.item.paint(tmp.getContext('2d'), 16, 256);
-    // lay the cue (texture y = length) along the diagonal
-    x.save(); x.translate(1, 15); x.rotate(-Math.PI / 4);
-    x.transform(0, 3 / 16, 21 / 256, 0, 0, -1.5);
-    x.drawImage(tmp, 0, 0);
-    x.restore();
-  }
-  return c;
-}
+// little preview of a cosmetic for shop cards
+function cosmeticPreview(cos) { return cosmeticThumb({ ...cos.item, kind: cos.kind }); }
 
 const QUARTERMASTER = [
   'SIGN HERE. AND HERE. AND ON THE MISSILE.',
@@ -347,7 +329,7 @@ export class UI {
     const cont = sus || saved;
     const contRun = sus ? sus.run : saved;
     const MODE_NAME = { daily: 'DAILY · ', endless: 'ENDLESS · ', bossrush: 'BOSS RUSH · ', onecue: 'ONE CUE · ', chaos: 'CHAOS · ' };
-    const contSub = !cont ? '' : contRun.mode === 'rajis' ? `RAJIS · OPERATION ${contRun.op || ''} · STOP ${contRun.node + 1}/9`
+    const contSub = !cont ? '' : contRun.mode === 'rajis' ? `RAJIS · OPERATION ${contRun.op || ''} · STOP ${contRun.node + 1}/${contRun.nodes?.length || 8}`
       : `${MODE_NAME[contRun.mode] || ''}${contRun.after ? 'AFTERHOURS' : `FLOOR ${contRun.floor}`} · ${contRun.chips} CHIPS · ${contRun.relics.length} RELICS`;
     const modes = ['onecue', 'chaos', 'bossrush'].some(m => g.gate(m));
     const defs = [
@@ -357,21 +339,28 @@ export class UI {
       ['COLLECTION', 'RELICS · SYNERGIES · RECORDS · HISTORY', () => this.showCollection()],
       ['SETTINGS', 'VIDEO · AUDIO · SAVE', () => this.showSettings()],
       ['PLAY NORMAL 8-BALL', 'SCRATCH CLASSIC · STRAIGHT POOL', () => this.confirmClassic(), 'gold'],
+      // something has got into the menu (only once it has been found)
+      d.rajis?.found ? ['&gt; RAJIS', '', () => { g.audio.radarPing(); this.rajisEnter(); }, 'rajis-item'] : null,
     ].filter(Boolean);
     const items = defs.map(([t, s, , cls]) => { const m = h('div', 'mi shadow' + (cls ? ' ' + cls : ''), s ? `${t}<span class="sub">${s}</span>` : t); menu.appendChild(m); return m; });
     const keys = this.navList(items, {
       onSelect: (i) => { this.g.audio.ui('select'); defs[i][2](); },
     });
     this.footer(el);
-    // something small in the corner, for the people who found it
-    if (d.rajis?.found) {
-      const dot = h('div', 'rajis-dot ia');
-      dot.onclick = (e) => { e.stopPropagation(); g.audio.radarPing(); this.rajisEnter(); };
-      el.appendChild(dot);
+    // before it is found: after enough small wrong things, a blip that should not be there
+    if (!d.rajis?.found && (d.rajis?.clues || 0) >= 3) {
+      const blip = h('div', 'rajis-blip ia');
+      blip.title = '';
+      blip.onclick = (e) => { e.stopPropagation(); d.rajis.how = 'blip'; this.close(entry); this.rajisFound(() => this.showMainMenu()); };
+      el.appendChild(blip);
     }
     const entry = this.open(el, { keys });
     this.g.state = 'menu';
     this.announceUnlocks();
+    // cosmetics earned since the last visit get their moment
+    const fresh = (this.g.meta.newCosmetics || []).splice(0);
+    this.queueUnlocks(fresh);
+    if (this.unlockQ?.length) setTimeout(() => { if (this.stack.length === 1 && this.g.state === 'menu') this.flushUnlocks(); }, 700);
     if (g.meta.problem === 'corrupt') { g.meta.problem = null; this.toast('A NEW SAVE WAS STARTED', '#ff3b5c', 'YOUR SAVE COULD NOT BE READ'); }
     if (g.meta.problem === 'nostorage' && !g.meta.warnedStorage) { g.meta.warnedStorage = true; this.toast('PROGRESS LASTS UNTIL YOU CLOSE THE TAB', '#ffc21c', 'THIS BROWSER IS BLOCKING SAVES'); }
   }
@@ -592,16 +581,15 @@ export class UI {
           opt(`<div class="nm" style="color:${f ? '#c08aff' : 'var(--dim)'}">${f ? a.name : '???'}</div><div class="ds">${f ? a.desc : 'Something very wrong, somewhere.'}</div>`, f ? ' sel' : '');
         });
       } else if (name === 'COSMETICS') {
-        const lockText = (it) => it.unlock?.ach ? (ACHIEVEMENTS.find(x => x.id === it.unlock.ach)?.secret && !d.achievements[it.unlock.ach] ? 'A SECRET' : `ACHIEVEMENT · ${ACHIEVEMENTS.find(x => x.id === it.unlock.ach)?.name}`) : it.unlock?.level ? `REACH LV ${it.unlock.level}` : '';
-        const all = [['TABLE', THEMES], ['BALLS', BALL_SKINS], ['CUE', CUE_SKINS]];
         let got = 0, tot = 0;
-        for (const [kind, list] of all) for (const it of list) {
+        for (const [kind, list] of Object.entries(COSMETICS)) for (const it of list) {
           if (!meta.visible(it)) continue;
           const un = meta.isUnlocked(it); tot++; if (un) got++;
-          const secret = it.unlock?.ach && ACHIEVEMENTS.find(x => x.id === it.unlock.ach)?.secret && !un;
-          opt(`<div class="nm" style="color:${un ? 'var(--ink)' : 'var(--dim)'}">${secret ? '???' : it.name}</div><div class="ds"><span style="color:var(--cyan)">${kind}</span><br>${un ? it.desc : lockText(it)}</div>`, un ? ' sel' : ' locked');
+          const secret = !un && meta.unlockText(it) === 'A SECRET';
+          const o = opt(`<div class="nm" style="color:${un ? 'var(--ink)' : 'var(--dim)'}">${secret ? '???' : it.name}</div><div class="ds"><span style="color:var(--cyan)">${KIND_NAME[kind]}${it.animated ? ' · ANIMATED' : ''}</span><br>${un ? it.desc : secret ? 'A secret.' : meta.unlockText(it)}</div>`, un ? ' sel' : ' locked');
+          o.insertBefore(cosmeticThumb({ ...it, kind }), o.firstChild);
         }
-        hint.textContent = `UNLOCKED ${got} / ${tot} · CLASSIC COSMETICS LIVE IN SCRATCH CLASSIC`;
+        hint.textContent = `UNLOCKED ${got} / ${tot} · EQUIP THEM IN THE LOADOUT`;
       } else if (name === 'ACHIEVEMENTS') {
         const list = meta.achievementList();
         const got = list.filter(a => d.achievements[a.id]).length;
@@ -675,6 +663,7 @@ export class UI {
         opt('crt', 'CRT FILTER', [true, false], ['ON', 'OFF']),
         opt('bloom', 'BLOOM', [true, false], ['ON', 'OFF']),
         opt('particles', 'PARTICLES', ['low', 'med', 'high'], ['LOW', 'MEDIUM', 'HIGH']),
+        opt('trails', 'SHOT TRAILS', [true, false], ['ON', 'OFF'], 'CHOOSE THE STYLE IN THE LOADOUT'),
       ],
       UI: [
         opt('uiScale', 'UI SCALE', ['auto', 0.8, 0.9, 1, 1.1], ['AUTO', '80%', '90%', '100%', '110%']),
@@ -915,6 +904,7 @@ export class UI {
     window.addEventListener('mouseup', () => { drag = false; });
     this.h.spin.addEventListener('dblclick', () => { this.g.spin.x = 0; this.g.spin.y = 0; });
     this.sig = {};
+    this.buildEncBar();
   }
 
   showHUD(on) { this.hud.classList.toggle('on', on); if (on) this.updateHUD(true); }
@@ -922,7 +912,7 @@ export class UI {
   updateHUD(force = false) {
     const g = this.g, run = g.run, e = g.enc;
     if (!run) return;
-    const atTable = e && ['intro', 'aim', 'charge', 'shooting', 'sim', 'place', 'house', 'houseWait', 'result', 'enemy'].includes(g.state);
+    const atTable = e && ['intro', 'aim', 'charge', 'shooting', 'sim', 'place', 'house', 'houseWait', 'result', 'enemy', 'hold'].includes(g.state);
     this.hud.querySelector('.hud-tl').style.visibility = atTable ? 'visible' : 'hidden';
     this.hud.querySelector('.hud-meters').style.visibility = atTable ? 'visible' : 'hidden';
     if (!this.h.heat.querySelector('.hf').firstChild) this.h.heat.querySelector('.hf').innerHTML = glyphHTML('flame');
@@ -934,7 +924,7 @@ export class UI {
       const shotsLeft = Math.max(0, e.shots);
       const S = g.shot;
       const tent = S && !S.house ? (def.progress ? def.progress(g, S, e) : S.counted) : 0;
-      const sig = [def.id, e.progress, e.goal, shotsLeft, tent, e.ghostCharges, g.ghostArmed, g.chaosRule?.id, e.chBroken, e.shotsTaken, e.stakeBroken, e.phase, e.rivalScore, e.book?.text, e.book?.accepted, e.seqNext, e.lastGame, e.coreTime, run.hearts, run.tstate?.left].join('|');
+      const sig = [def.id, e.ghostCharges, g.ghostArmed, e.chBroken, e.shotsTaken, e.stakeBroken, e.book?.text, e.book?.accepted, (e.mods || []).length, e.anomaly?.id].join('|');
       if (force || sig !== this.sig.obj) {
         this.sig.obj = sig;
         const tag = def.boss ? `<span class="obj-tag boss">${e.remix ? 'REMIX' : 'BOSS'}${e.phase > 1 ? ' · ' + ROMAN[Math.min(3, e.phase)] : ''}</span>` : e.kind === 'elite' ? '<span class="obj-tag elite">ELITE</span>' : e.stake ? '<span class="obj-tag stakes">HIGH STAKES</span>' : e.kind === 'highroller' ? `<span class="obj-tag elite">HIGH ROLLER · ${e.hr}</span>` : e.rivalDef ? `<span class="obj-tag" style="background:${e.rivalDef.color}">${e.nemesis ? 'NEMESIS' : 'RIVAL'}</span>` : e.kind === 'trickshot' ? '<span class="obj-tag elite">TRICK</span>' : '';
@@ -967,19 +957,16 @@ export class UI {
         if (e.stake) bet += `<div class="obj-bet ${e.stakeBroken ? 'broken' : ''}">${glyphHTML(e.stakeBroken ? 'cross' : 'warn')} ${e.stakeBroken ? 'STAKE BROKEN' : 'STAKE'}: ${e.stake.name}</div>`;
         const name = e.anomaly ? e.anomaly.name : run.mode === 'rajis' && MISSIONS[def.id] ? MISSIONS[def.id] : e.puzzle ? e.puzzle.name : nm;
         const book = e.book ? `<div class="bookie">${glyphHTML('dice')} THE BOOKIE: ${e.book.text} · +${e.book.win} / -${e.book.lose} ${e.book.accepted ? `<span class="bk-btn on">${e.book.forced ? 'FORCED' : 'TAKEN'}</span>` : '<span class="bk-btn ia">[B] TAKE IT</span>'}</div>` : '';
-        this.h.obj.innerHTML = this.L(`<div class="obj-name chrome" style="${def.boss ? 'font-size:calc(var(--px)*7)' : ''}">${name}</div>${tag}<div class="obj-text">${def.objective(e)}</div>${mod}${anom}${mods}${bet}${book}${pips}${shots}${ghost}`) + this.rivalPanel(e);
+        // the objective itself lives in the encounter bar; this corner only lists extra rules
+        const rules = `${mod}${anom}${mods}${bet}${book}${ghost}`;
+        this.h.obj.innerHTML = rules ? this.L(`<div class="obj-k">TABLE RULES</div>${rules}`) : '';
+        this.hud.querySelector('.hud-tl').classList.toggle('empty', !rules);
+        void name; void tag; void pips; void shots;
         const bk = this.h.obj.querySelector('.bk-btn.ia');
         if (bk) bk.onclick = (ev) => { ev.stopPropagation(); g.bookieAccept(); };
       }
-      if (def.id === 'blitz') {
-        const t = this.h.obj.querySelector('.timer');
-        if (t) { t.textContent = Math.ceil(e.timer); t.classList.toggle('low', e.timer <= 10); }
-      }
-      if (def.id === 'clock') {
-        const t = this.h.obj.querySelector('.timer');
-        if (t) { t.textContent = Math.ceil(Math.max(0, e.clock)); t.classList.toggle('low', e.clock <= 4); }
-      }
     }
+    this.updateEncBar(force);
     // chaos card
     const chaos = g.chaosRule?.id || '';
     if (force || chaos !== this.sig.chaos) {
@@ -1217,6 +1204,7 @@ export class UI {
     if (!a) return;
     this.g.audio.levelUp();
     const el = h('div', 'toast panel', `<div class="k">${glyphHTML('star')} ACHIEVEMENT</div><div class="t" style="color:var(--gold)">${a.name}</div><div style="font-size:calc(var(--px)*4);color:var(--dim);margin-top:calc(var(--px)*2)">${a.desc}${a.reward ? `<br><span style="color:var(--cyan)">UNLOCKED ${a.reward}</span>` : ''}</div>`);
+    this.queueUnlocks(this.unlocksFor(id));
     this.toasts.appendChild(el);
     setTimeout(() => el.remove(), 3700);
   }
@@ -1286,7 +1274,7 @@ export class UI {
     const done = () => { if (t.el) t.el.remove(); this.tut = null; g.meta.data.tutorialDone = true; g.meta.save(); };
     if (t.step === 0 && (g.tutorialAim > 250 || t.shots)) { t.step = 1; t.t = 0; this.showTut('<b>HOLD</b> <span class="k">LEFT CLICK</span> TO CHARGE · <b>RELEASE</b> TO SHOOT'); }
     else if (t.step === 1 && t.shots) { t.step = 2; t.t = 0; if (t.el) t.el.remove(); t.el = null; }
-    else if (t.step === 2 && g.state === 'aim') { t.step = 3; t.t = 0; this.showTut('<b>SINK THE BALLS</b> BEFORE YOUR <b>SHOTS</b> RUN OUT · YOUR GOAL IS TOP LEFT<br><span class="k">MOUSE WHEEL</span> SETS MAX POWER'); }
+    else if (t.step === 2 && g.state === 'aim') { t.step = 3; t.t = 0; this.showTut('YOUR GOAL AND YOUR <b>SHOTS</b> ARE ON THE <b>BAR AT THE BOTTOM</b><br><span class="k">MOUSE WHEEL</span> SETS MAX POWER'); }
     else if (t.step === 3 && (t.shots >= 2 || t.t > 9)) { t.step = 4; t.t = 0; this.showTut('<span class="k">W A S D</span> ADDS <b>SPIN</b> TO THE CUE BALL · <span class="k">R</span> RESETS IT'); }
     else if (t.step === 4 && (t.shots >= 3 || t.t > 9)) { t.step = 5; t.t = 0; this.showTut('<span class="k">RIGHT-DRAG</span> TURNS THE CAMERA · <span class="k">C</span> TOP-DOWN VIEW · HOLD <span class="k">SPACE</span> TO FAST-FORWARD'); }
     else if (t.step === 5 && (t.shots >= 4 || t.t > 8)) done();
@@ -1486,10 +1474,12 @@ export class UI {
   bossPhase(def, n, text) {
     const el = h('div', 'phase-banner');
     el.style.setProperty('--bc', def.color);
-    el.innerHTML = `<div class="pk">${def.name}</div><div class="pt">PHASE ${ROMAN[n]}</div><div class="pd">${text}</div>`;
+    el.innerHTML = this.L(`<div class="pk">${def.name}</div><div class="pt">PHASE ${ROMAN[n] || ''}</div><div class="pd">${text}${/[.!?]$/.test(text) ? '' : '.'}</div>`);
     this.pops.appendChild(el);
     setTimeout(() => el.remove(), 2600);
     this.updateHUD(true);
+    this.pulseBar('phase');
+    this.encFeedback(`THE RULES CHANGED · ${text}`, 'warn', 2600);
   }
 
   challengeOffer(ch, e, cb) {
@@ -1514,7 +1504,9 @@ export class UI {
     this.showTip('bet');
   }
 
-  encounterIntro(e, go) {
+  encounterIntro(e, go) { this.objectiveIntro(e, go); }
+
+  oldEncounterIntro(e, go) {
     const g = this.g, run = g.run;
     const tables = run.nodes.filter(n => ['table', 'elite', 'boss'].includes(n.type)).length;
     const idx = run.nodes.slice(0, run.node + 1).filter(n => ['table', 'elite', 'boss'].includes(n.type)).length;
@@ -1583,7 +1575,9 @@ export class UI {
   bossIntro(def, go, e = null) {
     const g = this.g;
     const el = h('div', 'screen letterbox');
-    el.innerHTML = `<div class="boss-warn">${glyphHTML('warn')} WARNING ${glyphHTML('warn')} ${e?.remix ? 'REMIX' : 'BOSS TABLE'} ${glyphHTML('warn')} WARNING ${glyphHTML('warn')}</div><div class="boss-name chrome" style="filter:drop-shadow(0 0 calc(var(--px)*10) ${def.color})">${def.name}${e?.remix ? '<span style="display:block;font-size:0.4em;letter-spacing:0.3em">(REMIX)</span>' : ''}</div><div class="boss-jp" style="color:${def.color}">${def.jp}</div><div class="boss-intro shadow"></div><div class="hint">${def.blurb}</div>`;
+    const o = e ? objectiveInfo(g, e) : null;
+    if (e) { const d = g.meta.data; d.learned = d.learned || {}; d.learned.boss = 1; }
+    el.innerHTML = `<div class="boss-warn">${glyphHTML('warn')} WARNING ${glyphHTML('warn')} ${e?.remix ? 'REMIX' : 'BOSS TABLE'} ${glyphHTML('warn')} WARNING ${glyphHTML('warn')}</div><div class="boss-name chrome" style="filter:drop-shadow(0 0 calc(var(--px)*10) ${def.color})">${def.name}${e?.remix ? '<span style="display:block;font-size:0.4em;letter-spacing:0.3em">(REMIX)</span>' : ''}</div><div class="boss-jp" style="color:${def.color}">${def.jp}</div><div class="boss-intro shadow"></div>${o ? `<div class="boss-obj"><span>OBJECTIVE</span>${o.title} · ${e.shots} SHOTS</div><div class="boss-how">${o.line}</div>` : `<div class="hint">${def.blurb}</div>`}`;
     g.screenFlash(0x000000, 0.6);
     let done = false;
     const fin = () => {
@@ -1597,9 +1591,8 @@ export class UI {
     };
     const entry = this.open(el, { keys: () => { fin(); return true; }, click: fin });
     el.addEventListener('click', fin);
-    this.type(el.querySelector('.boss-intro'), def.intro, 45, 1400);
-    setTimeout(fin, 5200);
-    this.showTip('boss');
+    this.type(el.querySelector('.boss-intro'), def.intro, 38, 700);
+    setTimeout(fin, 3900);
   }
 
   type(el, text, speed = 30, delay = 0) {
@@ -1635,9 +1628,10 @@ export class UI {
         g.audio.coin(4);
       }, 350 + res.lines.length * 220);
     } else if (res.free) {
-      box.innerHTML = `<div class="title-bar chrome" style="text-align:center">${this.L(res.reason)}</div><div class="title-jp" style="text-align:center">惜しい</div><div class="confirm">THE TRICK TABLE WINS THIS TIME.<br><span style="color:var(--dim)">NO HEART LOST · NO PRIZE · THE NIGHT GOES ON</span></div><div style="text-align:center;margin-top:calc(var(--px)*8)"><button class="btn">MOVE ON</button></div>`;
+      box.innerHTML = `<div class="title-bar chrome" style="text-align:center">${this.L(res.reason)}</div><div class="title-jp" style="text-align:center">惜しい</div><div class="confirm">ALL THREE ATTEMPTS ARE USED UP.<br><span style="color:var(--dim)">NO HEART LOST · NO PRIZE · THE NIGHT GOES ON</span></div><div style="text-align:center;margin-top:calc(var(--px)*8)"><button class="btn">MOVE ON</button></div>`;
     } else {
-      box.innerHTML = this.L(`<div class="title-bar chrome" style="text-align:center;color:var(--red)">${res.reason}</div><div class="title-jp" style="text-align:center">敗北</div><div class="confirm">YOU LOST A HEART.<br><span style="color:var(--dim)">${res.hearts} HEART${res.hearts === 1 ? '' : 'S'} REMAINING · ${res.retry ? 'THE BOSS AWAITS A REMATCH' : 'NO REWARD — THE NIGHT GOES ON'}</span></div><div class="hearts" style="justify-content:center;margin-top:calc(var(--px)*6);display:flex;gap:calc(var(--px)*2)"></div><div style="text-align:center;margin-top:calc(var(--px)*8)"><button class="btn">${res.retry ? 'REMATCH' : 'MOVE ON'}</button></div>`);
+      const why = g.enc ? endText(g.enc, false, res.reason) : { title: res.reason, sub: '' };
+      box.innerHTML = this.L(`<div class="title-bar chrome" style="text-align:center;color:var(--red)">${why.title}</div><div class="title-jp" style="text-align:center">敗北</div><div class="result-why">${why.sub}</div><div class="confirm">YOU LOST A HEART.<br><span style="color:var(--dim)">${res.hearts} HEART${res.hearts === 1 ? '' : 'S'} REMAINING · ${res.retry ? 'THE BOSS AWAITS A REMATCH' : 'NO REWARD — THE NIGHT GOES ON'}</span></div><div class="hearts" style="justify-content:center;margin-top:calc(var(--px)*6);display:flex;gap:calc(var(--px)*2)"></div><div style="text-align:center;margin-top:calc(var(--px)*8)"><button class="btn">${res.retry ? 'REMATCH' : 'MOVE ON'}</button></div>`);
       const hh = box.querySelector('.hearts');
       for (let i = 0; i < g.run.maxHearts; i++) { const c = heartIcon(i < res.hearts); c.style.width = 'calc(var(--px)*14)'; c.style.height = 'calc(var(--px)*12)'; hh.appendChild(c); }
     }
@@ -1715,7 +1709,7 @@ export class UI {
         else if (it.type === 'mystery') { icon = ['mystery', '#c08aff']; name = 'MYSTERY RELIC'; sub = '???'; desc = 'Could be anything. Could be cursed.'; col = '#c08aff'; }
         else if (it.type === 'upgrade') { icon = [it.relic.id, '#ffe23b']; name = it.relic.name + '+'; sub = 'TUNE-UP'; desc = it.relic.up; col = 'var(--gold)'; card.classList.add('upgrade'); }
         else if (it.type === 'bargain') { icon = [it.relic.id, RARITY.cursed.color]; name = it.relic.name; sub = 'CURSED BARGAIN'; desc = it.relic.desc + ' He pays YOU to take it.'; col = 'var(--red)'; card.classList.add('cursed'); }
-        else { const c = it.cos; name = c.item.name; sub = c.kind === 'ball' ? 'BALL SET · PERMANENT' : 'CUE · PERMANENT'; desc = c.item.desc; col = 'var(--gold)'; icon = null; }
+        else { const c = it.cos; name = c.item.name; sub = `${{ ball: 'BALL SET', cue: 'CUE', felt: 'FELT' }[c.kind] || 'COSMETIC'} · PERMANENT`; desc = c.item.desc; col = 'var(--gold)'; icon = null; }
         if (icon) { const ic = relicIcon(icon[0], icon[1]); ic.classList.add('ico'); card.appendChild(ic); }
         else { const pv = cosmeticPreview(it.cos); pv.classList.add('ico'); card.appendChild(pv); }
         const priceTxt = it.price < 0 ? `+${-it.price} ${CHIP()}` : `${CHIP()}${it.price}`;
@@ -1761,6 +1755,11 @@ export class UI {
     box.innerHTML = `<div class="rr" style="font-size:calc(var(--px)*4);color:var(--hot);letter-spacing:0.3em;margin-bottom:calc(var(--px)*4)">? STRANGE EVENT ?</div><div class="event-title chrome"></div><div class="event-text"></div><div class="menu" style="margin-top:calc(var(--px)*4)"></div>`;
     el.appendChild(box);
     box.querySelector('.event-title').textContent = ev.title;
+    if (ev.who) {
+      const f = h('div', 'ev-who', `<span>${ev.who.toUpperCase()}</span>`);
+      f.prepend(portraitIcon(ev.who));
+      box.insertBefore(f, box.querySelector('.event-title'));
+    }
     this.showTip('event');
     this.type(box.querySelector('.event-text'), ev.text, 28, 300);
     const menu = box.querySelector('.menu');
@@ -1873,4 +1872,4 @@ export class UI {
   escape() { }
 }
 
-Object.assign(UI.prototype, AfterUI);
+Object.assign(UI.prototype, AfterUI, EncounterUI, LoadoutUI);

@@ -1,5 +1,108 @@
 # SCRATCH: AFTERHOURS
 
+## v2.1.0 · 24 September 2026
+
+A focused update: you always know what a table wants, Classic is a complete
+game of pool, and every cosmetic has been rebuilt so it never gets in the way
+of reading the table.
+
+Your save carries over. Retired cosmetics become their closest replacement, and
+your Classic record becomes a Classic level.
+
+### You always know what to do
+
+- **The objective lives at the bottom of the screen now**, in a large bar:
+  - what the table wants, in plain words ("POT 3 BANK SHOTS");
+  - how far along you are ("1 / 3 COMPLETE");
+  - how many shots you have left.
+
+  Bosses get a health bar with phase marks, rivals get a second bar racing
+  yours, and your last shot is marked **FINAL SHOT**.
+- **Every table opens with its objective**: the room dims, the goal is shown big
+  and clear, then flies down into the bar. Click to skip.
+- **The first time a rule appears**, a short explanation with a little moving
+  diagram shows it once (bank shots, kick shots, combos, the 8 going last...).
+- **Every shot is explained** just above the bar:
+  - "COUNTED +1 · 3 / 5 POTTED";
+  - "STRAIGHT POT · NO CUSHION · DOES NOT COUNT";
+  - "MISS · 2 SHOTS LEFT";
+  - "SCRATCH · -1 SHOT".
+- **Every table ends with a reason**: TABLE CLEARED, BOSS DEFEATED, or TABLE
+  FAILED with why ("You ran out of shots with 2 balls to go.").
+- **Bosses feel like bosses**:
+  - the music cuts, the lights change and the name lands;
+  - the intro says what the boss does in one sentence;
+  - a phase change stops play for a beat and says what changed.
+- **Contracts** complete and fail with their own banner.
+- **You can keep aiming while you power up.** Hold the button and move the
+  mouse (or the arrow keys) to adjust the line right up to the release.
+
+### SCRATCH Classic, properly
+
+It is still completely normal 8-ball.
+
+- **Ten regulars** with names, portraits and a way of playing: Safe,
+  Aggressive, Positional, Trickster, or the new **Pressure**. They remember
+  your record against them.
+- **Quick Match** (pick a difficulty and play) and **Custom Match** (opponent,
+  difficulty, style, format, aim guide, shot clock, table, room and cue).
+- **Match formats**: single frame, best of 3, best of 5, race to 3, race to 5.
+- **Opponents play like people**:
+  - they line up in two moves and take practice strokes;
+  - Pressure players shoot fast;
+  - Safe players take their time.
+- **Shot recognition**: bank, double bank, combination, carom, long pot, break
+  pot, good position and good safety.
+- **Break & Run** gets its moment, its own achievement and a reward.
+- **Match end**: pots, fouls, banks, longest pot, safeties and average shot time
+  for both players, your record against that opponent, and Rematch in one key.
+  Rematch is now almost instant.
+- **Practice challenges**: Break (spread, pots, scratch, instant rerack), Bank,
+  Long Pot, Positioning, Clearance and Safety, each with a best score.
+- **A fourth room**, the **Tournament Hall**, and new names for the others:
+  Midnight Lounge, Private Club and Penthouse. Each room has its own quiet
+  ambience (rain, a ticking clock, the city, a crowd).
+- **Cameras**: 3D, top down and a new **cue view**, plus an optional follow
+  camera.
+- A match-winning 8 now and then rolls in slow motion.
+- **Classic level** unlocks rooms, felts and cues. It never changes the
+  gameplay.
+- **Records**: win rate, streaks, Expert wins, break-and-runs, banks, safeties,
+  playtime and more.
+- A four-line welcome the first time you sit down: normal 8-ball, solids or
+  stripes, clear your group, pot the 8 last.
+
+### Cosmetics, rebuilt
+
+- **A readability rule** runs through every set:
+  - the cue ball is always white and marked;
+  - the 8 is always dark with a clear 8;
+  - stripes always have a broad band;
+  - numbers always sit in a light disc.
+- **15 ball sets**, 9 of them animated in the shader: Galaxy, Plasma, Lava,
+  Digital, Hologram, Liquid, Void, Neon and Afterhours. Each animates the same
+  way in PS1 (dithered) and Modern (smooth). Sets that broke the rule were
+  retired or redesigned.
+- **20 cues**, including the new animated Volt, Ember, Nebula, Void and Glass.
+- **Felts**, **shot trails** and **pocket effects** are separate slots now. Trails
+  can be switched off.
+- **A new Loadout screen**:
+  - a live preview shows every ball set as the cue ball, 1, 8, 9 and 15;
+  - cues can be turned and zoomed;
+  - filters: All, Owned, Animated, Favourites and New.
+- **An unlock moment**: the room dims and the new item turns slowly. No boxes,
+  no chests.
+- **Separate loadouts**: Classic keeps its own and shows only classic items
+  unless you set **Cosmetics** to **All compatible**.
+- **Rewards come from what you did**:
+  - a break-and-run gives Ivory;
+  - beating the Expert gives Ebony;
+  - a tournament gives the Tournament felt;
+  - HEAT V gives Plasma;
+  - beating The Owner gives Afterhours.
+- Basic sets can still be bought with chips in the shop. There are no real-money
+  stores.
+
 ## v2.0.0 · 24 September 2026
 
 The club stays open later now.

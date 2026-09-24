@@ -12,6 +12,7 @@ import { ENCOUNTERS, rackTriangle, rackScatter, makeEncounter } from './encounte
 import { rollRelics, relicById, PROTOCOLS } from './relics.js';
 import { rollMods, modCount, gradeRun } from './mastery.js';
 import { THEMES } from './cosmetics.js';
+import { takeOverScreens } from '../render/textures.js';
 
 const R = TABLE.R;
 
@@ -20,11 +21,11 @@ const R = TABLE.R;
 const LEX = [
   ['TABLE CLEARED', 'MISSION COMPLETE'], ['BOSS DEFEATED', 'TARGET NEUTRALISED'], ['OUT OF SHOTS', 'SYSTEM FAILURE'],
   ['OUT OF ATTEMPTS', 'SYSTEM FAILURE'], ['TIME UP', 'WINDOW CLOSED'], ['TRIPLE BANK', 'TRIPLE RICOCHET'], ['DOUBLE BANK', 'DOUBLE RICOCHET'],
-  ['BANK SHOT', 'RICOCHET STRIKE'], ['KICK SHOT', 'BLIND STRIKE'], ['COMBINATION', 'CHAIN DETONATION'], ['LONG POT', 'LONG-RANGE KILL'],
+  ['BANK SHOTS', 'RICOCHET INTERCEPTS'], ['KICK SHOTS', 'BLIND STRIKES'], ['BANK SHOT', 'RICOCHET INTERCEPT'], ['KICK SHOT', 'BLIND STRIKE'], ['COMBINATION', 'CHAIN DETONATION'], ['LONG POT', 'LONG-RANGE KILL'],
   ['PERFECT POSITION', 'TACTICAL POSITION'], ['RAZOR CUT', 'SURGICAL STRIKE'], ['PAPER CUT', 'SURGICAL STRIKE'], ['CAROM', 'DEFLECTION'],
   ['TABLE PURSE', 'MISSION PAY'], ['ELITE PURSE', 'MISSION PAY'], ['BOSS BOUNTY', 'COMMAND BONUS'], ['TABLE SCORE', 'MISSION SCORE'],
-  ['GOLDEN BALL', 'HIGH-VALUE TARGET'], ['8-BALL FINISH', 'CORE KILL'], ['THE CHALK SHOP', 'COMMAND'],
-  ['SCRATCH', 'FRIENDLY FIRE'], ['DOUBLE!', 'DOUBLE KILL!'], ['TRIPLE!!', 'TRIPLE KILL!!'], ['QUAD!!!', 'QUAD KILL!!!'],
+  ['GOLDEN BALL', 'HIGH-VALUE TARGET'], ['GOLDEN!', 'HIGH VALUE TARGET!'], ['8-BALL FINISH', 'CORE KILL'], ['THE CHALK SHOP', 'COMMAND'],
+  ['SCRATCH', 'SYSTEM FAILURE'], ['DOUBLE!', 'MULTI INTERCEPT!'], ['TRIPLE!!', 'MULTI INTERCEPT x3!!'], ['QUAD!!!', 'MULTI INTERCEPT x4!!!'], ['BANK!', 'RICOCHET INTERCEPT'],
   ['BALLS', 'TARGETS'], ['BALL', 'TARGET'], ['POCKETS', 'DROP ZONES'], ['POCKET', 'DROP ZONE'], ['SINK', 'DESTROY'], ['POTS', 'HITS'], ['POT', 'HIT'],
   ['SHOTS', 'ROUNDS'], ['CHIPS', 'CREDITS'], ['RELICS', 'PROTOCOLS'], ['RELIC', 'PROTOCOL'], ['HEARTS', 'HULL'], ['HEART', 'HULL'],
   ['FLOOR', 'SECTOR'], ['HEAT', 'ALERT'], ['TABLE', 'MISSION'],
@@ -169,13 +170,34 @@ export const RAJIS_BOSSES = {
     objective: e => `FIRST TO ${e.goal} — IT PLAYS YOUR SHOTS BACK`,
   },
 };
+// ---------------------------------------------------------- the staff
+// The four run the war between their own boss fights: they introduce
+// themselves, issue the missions, and have opinions on the radio.
+export const STAFF = {
+  richard: { name: 'RICHARD', title: 'MISSILE COMMAND', color: '#ff3b30', hello: 'I HAVE REQUESTED MORE MISSILES. THEY SAID YES.',
+    issue: ['DESTROY THE TARGETS. QUIETLY. THEN LOUDLY.', 'I HAVE A MISSILE FOR THIS. I HAVE A MISSILE FOR EVERYTHING.', 'IF IT MOVES, INTERCEPT IT. IF IT DOES NOT MOVE, ALSO INTERCEPT IT.', 'THIS ONE IS SIMPLE. I HAVE STILL PREPARED A SALVO.'],
+    won: 'CLEAN. I WILL ADD IT TO THE WALL.', lost: 'WE HAVE MORE MISSILES. I CHECKED.' },
+  neil: { name: 'NEIL', title: 'SUPPORT', color: '#8fd14f', hello: 'I HAVE A PLAN. IT IS ON A WHITEBOARD.',
+    issue: ['THE PLAN IS ARROWS. FOLLOW THE ARROWS.', 'I HAVE SUPPORT ON STANDBY. THE SUPPORT IS ME.', 'STEP ONE: POT THINGS. STEP TWO: I WILL TELL YOU AFTER STEP ONE.', 'I DREW THIS ONE WITH A RULER. IT WILL GO FINE.'],
+    won: 'THAT WENT TO PLAN. MOSTLY.', lost: 'NEW PLAN. SAME WHITEBOARD.' },
+  paul: { name: 'PAUL', title: 'MACHINES', color: '#8fd1ff', hello: 'MY ROBOT HAS BEEN WATCHING YOU PLAY. IT HAS NOTES.',
+    issue: ['THE ROBOT RAN THE NUMBERS. THE NUMBERS SAY GO.', 'DO NOT TAKE THE OBVIOUS SHOT. THE ROBOT HATES THE OBVIOUS SHOT.', 'THE CYBER BULLET IS FUELLED AND WAITING. JUST IN CASE.', 'MY ROBOT SAYS THIS ONE IS EASY. MY ROBOT HAS BEEN WRONG ONCE.'],
+    won: 'THE ROBOT APPROVES. IT BEEPED TWICE.', lost: 'THE ROBOT HAS ADDED THAT TO ITS NOTES.' },
+  yahya: { name: 'YAHYA', title: 'ARMOUR', color: '#f5c542', hello: 'I PARKED THE TANK IN THE BRIEFING ROOM. NOBODY KNOWS HOW.',
+    issue: ['HIT IT HARD. IF THAT FAILS, HIT IT HARDER.', 'I HAVE ARMOURED THE TARGETS. BY ACCIDENT. SORRY.', 'THE TANK IS OUTSIDE IF YOU NEED IT. IT IS ALWAYS OUTSIDE.', 'NOTHING HERE IS ARMOURED. PROBABLY. I WOULD HIT IT HARD ANYWAY.'],
+    won: 'GOOD. HEAVY. I LIKE IT.', lost: 'THE TANK WOULD HAVE DONE BETTER. THE TANK IS NOT ALLOWED IN.' },
+};
+export const STAFF_ORDER = ['richard', 'neil', 'paul', 'yahya'];
+// who issues a mission at a given stop: everyone gets the radio in turn
+export const staffFor = (run, node) => STAFF_ORDER[((run?.seed || 0) + node) % 4];
+
 const MIRROR = { id: 'paulyamin', name: 'PAULYAMIN', color: '#c0a0ff', hidden: false, sting: [330, 311], turn: () => 0, mirror: true };
 export const RAJIS_ORDER = ['richard', 'neil', 'paul', 'yahya'];
 
 // ------------------------------------------------------------- events
 export const RAJIS_EVENTS = [
   {
-    id: 'r_missiles', title: 'RICHARD WANTS MORE MISSILES.',
+    id: 'r_missiles', who: 'richard', title: 'RICHARD HAS REQUESTED MORE MISSILES.',
     text: 'He has filled out the form in triplicate. The form is also a missile.',
     choices: [
       { label: 'APPROVE', act(G) { const r = relicById('p_missile'); if (r && !G.hasRelic('p_missile')) { G.gainRelic(r); return 'HE SALUTES THE FORM. YOU GAIN MISSILE STRIKE.'; } G.addChips(8); return 'HE ALREADY HAD THEM. HE GIVES YOU 8 CREDITS NOT TO ASK WHERE.'; } },
@@ -183,27 +205,35 @@ export const RAJIS_EVENTS = [
     ],
   },
   {
-    id: 'r_plan', title: 'NEIL HAS A PLAN.',
+    id: 'r_plan', who: 'neil', title: 'NEIL SAYS HE HAS A PLAN.',
     text: 'It is on a whiteboard. It is mostly arrows. One of the arrows points at you.',
     choices: [
-      { label: 'FOLLOW THE PLAN', sub: '+2 ROUNDS NEXT MISSION', act(G) { G.run.nextShotBonus = (G.run.nextShotBonus || 0) + 2; return 'YOU FOLLOW THE ARROW. IT WORKS. NOBODY KNOWS WHY.'; } },
-      { label: 'ASK QUESTIONS', act(G) { G.addChips(6); return 'HE ANSWERS EVERY QUESTION WITH ANOTHER ARROW. +6 CREDITS FOR YOUR PATIENCE.'; } },
+      { label: 'LISTEN', sub: '+2 ROUNDS NEXT MISSION', act(G) { G.run.nextShotBonus = (G.run.nextShotBonus || 0) + 2; return 'YOU FOLLOW THE ARROW. IT WORKS. NOBODY KNOWS WHY.'; } },
+      { label: 'IGNORE', act(G) { G.addChips(6); return 'HE DRAWS ANOTHER ARROW ANYWAY. +6 CREDITS FOR YOUR PATIENCE.'; } },
     ],
   },
   {
-    id: 'r_robot', title: 'PAUL\'S ROBOT IS ASKING QUESTIONS.',
-    text: '"WHAT IS A POCKET," it asks. "WHY DO YOU PUT THINGS IN IT."',
+    id: 'r_robot', who: 'paul', title: 'PAUL\'S ROBOT IS LOOKING AT THE TABLE.',
+    text: 'It has been looking at the table for forty minutes. "WHAT IS A POCKET," it asks. "WHY DO YOU PUT THINGS IN IT."',
     choices: [
-      { label: 'EXPLAIN', act(G) { const r = rollRelics(1, G.run.relics, { pool: 'rajis', forceRarity: 'rare' })[0]; if (r) { G.gainRelic(r); return `IT UNDERSTANDS. IT IMPROVES SOMETHING WHILE IT IS AT IT: ${r.name}.`; } G.addChips(8); return 'IT UNDERSTANDS. IT PAYS 8 CREDITS FOR THE LESSON.'; } },
-      { label: 'UNPLUG IT', act(G) { G.addChips(10); return 'IT PLUGS ITSELF BACK IN. IT REMEMBERS. +10 CREDITS FROM ITS BATTERY TRAY.'; } },
+      { label: 'LET IT COOK', act(G) { const r = rollRelics(1, G.run.relics, { pool: 'rajis', forceRarity: 'rare' })[0]; if (r) { G.gainRelic(r); return `IT UNDERSTANDS. IT IMPROVES SOMETHING WHILE IT IS AT IT: ${r.name}.`; } G.addChips(8); return 'IT UNDERSTANDS. IT PAYS 8 CREDITS FOR THE LESSON.'; } },
+      { label: 'TURN IT OFF', act(G) { G.addChips(10); return 'IT TURNS ITSELF BACK ON. IT REMEMBERS. +10 CREDITS FROM ITS BATTERY TRAY.'; } },
     ],
   },
   {
-    id: 'r_tank', title: 'YAHYA PARKED THE TANK IN THE BRIEFING ROOM.',
+    id: 'r_tank', who: 'yahya', title: 'YAHYA PARKED THE TANK IN THE BRIEFING ROOM.',
     text: 'The door is smaller than the tank. Nobody saw it happen. Yahya is eating a sandwich on the turret.',
     choices: [
       { label: 'RIDE IT', sub: '-1 HULL · A LEGENDARY PROTOCOL', act(G) { G.loseHeart('THE TANK'); const r = rollRelics(1, G.run.relics, { pool: 'rajis', forceRarity: 'legendary' })[0]; if (r) { G.gainRelic(r); return `YOU ARRIVE EARLY. ALSO THROUGH A WALL. YOU GAIN ${r.name}.`; } return 'YOU ARRIVE EARLY. ALSO THROUGH A WALL.'; } },
       { label: 'LEAVE A NOTE', act(G) { G.run.maxHearts++; G.heal(1); return 'HE WRITES BACK "OK". +1 MAX HULL.'; } },
+    ],
+  },
+  {
+    id: 'r_armor', who: 'yahya', title: 'YAHYA HAS REQUESTED MORE ARMOR.',
+    text: 'He has already welded it to the tank, the door and, for some reason, the kettle.',
+    choices: [
+      { label: 'APPROVE', sub: '+1 MAX HULL', act(G) { G.run.maxHearts++; G.heal(1); return 'THE BASE IS NOW ARMOURED. SO IS THE KETTLE. +1 MAX HULL.'; } },
+      { label: 'ABSOLUTELY NOT', act(G) { G.addChips(9); return 'HE SELLS THE SPARE PLATING. YOU GET A CUT. +9 CREDITS.'; } },
     ],
   },
   {
@@ -226,6 +256,40 @@ export const RAJIS_EVENTS = [
 
 // ---------------------------------------------------------------- the run
 export const RajisMixin = {
+  // ------------------------------------------------ the secret, before it is found
+  // Nobody is told. Regulars start to notice small wrong things (a CRT, a beep,
+  // a warning sign, a table number), and later an arcade machine turns up.
+  rajisEligible() {
+    const d = this.meta.data, st = d.stats;
+    return (st.wins || 0) >= 2 || ((st.wins || 0) >= 1 && (st.runs || 0) >= 6) || ((st.runs || 0) >= 12 && (d.bests?.furthestFloor || 0) >= 3);
+  },
+  // at most one clue a run, and rarely; rarer still once RAJIS is found
+  maybeRajisClue(e = null) {
+    const d = this.meta.data, run = this.run;
+    if (!run || run.mode === 'rajis' || run.rajisClue || run.mode === 'daily') return;
+    if ((d.stats.runs || 0) < 3 && !run.after) return;
+    const p = d.rajis.found ? 0.01 : run.after ? 0.3 : this.rajisEligible() ? 0.06 : 0.025;
+    if (Math.random() > p) return;
+    run.rajisClue = true;
+    const kinds = e ? ['crt', 'beep', 'warn', 'table'] : ['crt', 'beep', 'warn'];
+    const k = kinds[Math.floor(Math.random() * kinds.length)];
+    if (k === 'table' && e) e.rajisClue = true;
+    else this.later(2 + Math.random() * 5, () => this.rajisClueFx(k));
+    this.noteClue(k);
+  },
+  noteClue(k) {
+    const R0 = this.meta.data.rajis;
+    R0.clues = (R0.clues || 0) + 1;
+    R0.clueKinds = R0.clueKinds || {}; R0.clueKinds[k] = (R0.clueKinds[k] || 0) + 1;
+    this.meta.save();
+  },
+  rajisClueFx(k) {
+    if (!this.run || this.state === 'runend') return;
+    if (k === 'crt') { takeOverScreens(['RAJIS'], 420, '#8fd14f', '#021004'); this.audio.staticBurst(0.15, 0.03); }
+    else if (k === 'beep') this.audio.radarPing();
+    else if (k === 'warn') this.ui.missileGlyph?.();
+  },
+
   startRajis() {
     const d = this.meta.data;
     const seed = (Math.random() * 4294967296) >>> 0;
@@ -242,8 +306,8 @@ export const RajisMixin = {
       op: CODENAMES[seed % CODENAMES.length],
       nodes: [
         { type: 'table', loc: locs[0] }, { type: 'table', loc: locs[1] }, { type: 'event', loc: 'command' }, { type: 'shop', loc: 'command' },
-        { type: 'table', loc: locs[2] }, { type: 'boss', boss: mini, loc: RAJIS_BOSSES[mini].loc, mini: true },
-        { type: 'table', loc: locs[3] }, { type: 'boss', boss, loc: RAJIS_BOSSES[boss].loc }, { type: 'boss', boss: 'core', loc: 'command' },
+        { type: 'boss', boss: mini, loc: RAJIS_BOSSES[mini].loc, mini: true },
+        { type: 'table', loc: locs[2] }, { type: 'boss', boss, loc: RAJIS_BOSSES[boss].loc }, { type: 'boss', boss: 'core', loc: 'command' },
       ],
     };
     d.rajis.runs = (d.rajis.runs || 0) + 1;

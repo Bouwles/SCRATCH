@@ -31,13 +31,17 @@ export const LEVELS = {
 
 // How an opponent likes to play, separate from how well: the same hands,
 // different decisions.
+// tempo: how long it takes over a shot (thinking, lining up, practice strokes)
 export const STYLES = {
-  balanced: { name: 'Balanced', desc: 'Takes the percentage shot. No surprises.' },
-  cautious: { name: 'Cautious', desc: 'Plays safe whenever a pot is doubtful. Hates leaving you anything.', miss: -430, safety: 170, oppW: 1.35 },
-  aggressive: { name: 'Aggressive', desc: 'Goes for everything, hits it hard, rarely plays safe.', miss: -170, safety: -380, pace: [1, 1.45, 1.9] },
-  positional: { name: 'Positional', desc: 'Thinks two shots ahead. Always wants the next ball easy.', pos: 1.7, lookahead: true },
-  trickster: { name: 'Trickster', desc: 'Loves a bank or a kick. Would rather be clever than safe.', banks: true, kicks: true, trick: 90 },
+  safe: { name: 'Safe', desc: 'Plays safe whenever a pot is doubtful. Hates leaving you anything.', miss: -430, safety: 170, oppW: 1.35, tempo: 1.2, strokes: 3 },
+  aggressive: { name: 'Aggressive', desc: 'Goes for everything, hits it hard, rarely plays safe.', miss: -170, safety: -380, pace: [1, 1.45, 1.9], tempo: 0.85, strokes: 1 },
+  positional: { name: 'Positional', desc: 'Thinks two shots ahead. Always wants the next ball easy.', pos: 1.7, lookahead: true, tempo: 1.1, strokes: 2 },
+  trickster: { name: 'Trickster', desc: 'Loves a bank or a kick. Would rather be clever than safe.', banks: true, kicks: true, trick: 90, tempo: 1, strokes: 2 },
+  pressure: { name: 'Pressure', desc: 'Plays fast and never leaves an easy look. If it cannot pot, it hides the cue ball.', miss: -260, safety: 60, oppW: 1.7, tempo: 0.55, strokes: 1 },
+  balanced: { name: 'Balanced', desc: 'Takes the percentage shot. No surprises.', hidden: true, tempo: 1, strokes: 2 },
 };
+STYLES.cautious = STYLES.safe;            // saves from 2.0 called it cautious
+export const STYLE_IDS = ['safe', 'aggressive', 'positional', 'trickster', 'pressure'];
 
 const OPP_SIGMA = 0.0065;          // assume a competent opponent when judging a leave
 export const BREAK_SPEED = 9.6;    // a full break is harder than any normal stroke

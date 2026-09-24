@@ -7,8 +7,9 @@ import './after.css';
 import { RELICS, PROTOCOLS, RARITY, relicById } from '../game/relics.js';
 import { ACHIEVEMENTS, xpForLevel } from '../game/meta.js';
 import { SYNERGIES, HANDICAPS, handicapMul, RIVALS, rivalById, buildName, contractById, TABLE_STATES } from '../game/afterhours.js';
-import { RAJIS_BOSSES, RAJIS_ORDER, lex, LOCATIONS, MISSIONS } from '../game/rajis.js';
+import { RAJIS_BOSSES, RAJIS_ORDER, lex, LOCATIONS, MISSIONS, STAFF, STAFF_ORDER, staffFor } from '../game/rajis.js';
 import { relicIcon, achIcon, glyphHTML, glyph, portraitIcon } from './art.js';
+import { takeOverScreens } from '../render/textures.js';
 import { ROMAN, STYLE_GRADES, STYLE_COL } from '../game/mastery.js';
 
 function h(tag, cls = '', html = '') {
@@ -224,60 +225,135 @@ export const AfterUI = {
   },
 
   // ------------------------------------------ the arcade machine (RAJIS)
+  // The machine. Coins drop, nothing happens, then everything happens at once.
   async rajisFound(cb) {
     const g = this.g, R = g.renderer;
     this.closeAll();
     const el = h('div', 'screen rj-found');
-    el.innerHTML = `<div class="rjf-warn">${glyphHTML('warn')} MISSILE WARNING ${glyphHTML('warn')}</div><div class="rjf-text"></div><div class="rjf-sub"></div>`;
+    el.innerHTML = `<div class="rjf-warn">${glyphHTML('warn')} MISSILE WARNING ${glyphHTML('warn')}</div><div class="rjf-crt">RAJIS PROTOCOL DETECTED</div><div class="rjf-text"></div><div class="rjf-sub"></div>`;
     const entry = this.open(el, {});
     g.audio.playMusic('none');
-    g.audio.staticBurst(0.8, 0.12);
-    for (let i = 0; i < 20; i++) { R.fx.glitch = 0.4 + Math.random() * 0.5; R.fx.statik = Math.random() * 0.5; await wait(60); }
-    R.fx.glitch = 0; R.fx.statik = 0.1;
+    // the screen flickers…
+    g.audio.staticBurst(0.4, 0.08);
+    for (let i = 0; i < 8; i++) { R.fx.glitch = 0.2 + Math.random() * 0.4; await wait(60); }
+    R.fx.glitch = 0;
+    // …then nothing, for about a second
+    await wait(1100);
+    // missile warning, red lights, every CRT in the room
+    g.audio.siren(2.2);
     el.classList.add('alarm');
-    g.audio.siren(2.4);
-    await wait(2600);
-    el.classList.remove('alarm');
-    el.classList.add('black');
-    R.fx.statik = 0;
-    await wait(700);
-    g.audio.radarPing();
-    this.type(el.querySelector('.rjf-text'), 'RAJIS PROTOCOL FOUND.', 70);
-    await wait(2400);
+    g.tintLights?.('#ff1a10', 0.85);
+    g.accentTarget = 0.3;
+    takeOverScreens(['RAJIS', 'PROTOCOL', 'DETECTED'], 2400);
+    for (let i = 0; i < 5; i++) { g.screenFlash(0xff1010, 0.35); await wait(420); }
+    // hard cut to black
+    el.classList.remove('alarm'); el.classList.add('black');
+    g.audio.lightsOff();
+    await wait(900);
+    this.type(el.querySelector('.rjf-text'), 'WHAT THE HELL?', 55);
+    await wait(1700);
     const d = g.meta.data;
     d.rajis.found = true;
+    d.rajis.how = d.rajis.how || 'arcade';
     g.meta.save();
     g.achieve('rajis_found');
-    this.type(el.querySelector('.rjf-sub'), 'IT WILL BE WAITING ON THE MAIN MENU.', 30);
-    await wait(2800);
+    this.type(el.querySelector('.rjf-sub'), 'SOMETHING IS WAITING ON THE MAIN MENU.', 28);
+    await wait(2600);
+    g.tintLights?.(null);
+    g.accentTarget = 1;
     this.close(entry);
-    g.audio.playMusic(g.run?.after ? 'afterhours' : 'menu');
+    g.audio.playMusic(g.run?.after ? 'afterhours' : g.run ? 'shop' : 'menu');
     cb();
   },
 
+  // a small missile-warning sign, for half a second, in the corner (a clue)
+  missileGlyph() {
+    const el = h('div', 'rj-glyph', `${glyphHTML('warn')}`);
+    this.root.appendChild(el);
+    this.g.audio.tone(1760, { type: 'square', dur: 0.04, vol: 0.02, filter: 5000 });
+    setTimeout(() => el.remove(), 520);
+  },
+
   // ------------------------------------------------------ RAJIS: menus
+  // The menu freezes, the music stops, a beep, red, UNKNOWN PROTOCOL, the
+  // missile warning, black, one heavy hit: RAJIS. About four seconds.
   async rajisEnter() {
     const g = this.g, R = g.renderer;
     if (g.state === 'transition') return;
     g.state = 'transition';
+    this.stack.forEach(s => s.el.classList.add('frozen'));
+    g.audio.playMusic('none');
+    await wait(250);
+    g.audio.radarPing();
+    await wait(450);
+    for (let i = 0; i < 2; i++) { g.screenFlash(0xff1010, 0.45); await wait(160); }
     this.closeAll();
+    const el = h('div', 'screen rj-enter');
+    el.innerHTML = '<div class="rje-a">UNKNOWN PROTOCOL</div><div class="rje-b">MISSILE WARNING</div><div class="rje-logo">RAJIS</div>';
+    const entry = this.open(el, {});
+    takeOverScreens(['UNKNOWN', 'PROTOCOL'], 1400);
+    g.audio.staticBurst(0.3, 0.06);
+    await wait(700);
+    el.classList.add('warn');
     g.audio.siren(1.2);
-    g.audio.staticBurst(0.5, 0.1);
-    for (let i = 0; i < 12; i++) { R.fx.glitch = Math.random() * 0.8; R.fx.pixel = 1 + i * 0.6; g.screenFlash(0xff2010, 0.2); await wait(70); }
-    R.fade = 1; R.fx.glitch = 0; R.fx.pixel = 1;
+    await wait(1100);
+    el.classList.add('black');
+    R.fade = 1;
+    await wait(420);
+    g.audio.explosion(1.6);
+    g.audio.tone(42, { type: 'sine', dur: 1.4, vol: 0.5, slide: 28 });
+    g.shake(0.4);
+    el.classList.add('logo');
     this.setRajis(true);
     g.rajisTheme('command');
     g.setupMenuTable();
+    await wait(1100);
     g.audio.playMusic('rajis');
-    const el = h('div', 'screen rj-boot');
-    el.innerHTML = '<div class="rjb-text"></div>';
-    const entry = this.open(el, {});
-    this.type(el.querySelector('.rjb-text'), 'AUTHORIZATION REQUIRED ........ ACCEPTED', 28);
-    await wait(1900);
     this.close(entry);
-    for (let k = 0; k <= 10; k++) { R.fade = 1 - k / 10; await wait(40); }
+    for (let k = 0; k <= 10; k++) { R.fade = 1 - k / 10; await wait(35); }
     R.fade = 0;
+    // the first time in, the staff introduce themselves
+    const d = g.meta.data;
+    if (!d.rajis.metStaff) { d.rajis.metStaff = true; g.meta.save(); this.rajisRollCall(() => this.showRajisMenu()); return; }
     this.showRajisMenu();
+  },
+
+  // COMMAND STAFF: four faces, four lines, one after another
+  rajisRollCall(cb) {
+    const g = this.g;
+    this.closeAll();
+    g.state = 'menu';
+    const el = h('div', 'screen dim rj-roll');
+    el.innerHTML = `<div class="rj-k">${glyphHTML('radar')} COMMAND STAFF ${glyphHTML('radar')}</div><div class="title-bar chrome">THEY RUN THIS WAR</div><div class="rr-row"></div><div class="hint">CLICK TO REPORT FOR DUTY</div>`;
+    const row = el.querySelector('.rr-row');
+    STAFF_ORDER.forEach((id, i) => {
+      const S = STAFF[id];
+      const c = h('div', 'rs-card big', `<div class="rs-face"></div><div class="rs-n" style="color:${S.color}">${S.name}</div><div class="rs-t">${S.title}</div><div class="rs-l"></div>`);
+      c.querySelector('.rs-face').appendChild(portraitIcon(id));
+      c.style.animationDelay = `${i * 0.45}s`;
+      row.appendChild(c);
+      setTimeout(() => { if (el.isConnected) { g.audio.radarPing(); this.type(c.querySelector('.rs-l'), `"${S.hello}"`, 18); } }, 200 + i * 450);
+    });
+    let done = false, ready = false;
+    setTimeout(() => { ready = true; }, 1200);
+    const fin = () => { if (done || !ready) return; done = true; g.audio.ui('select'); this.close(entry); cb(); };
+    const entry = this.open(el, { keys: () => { fin(); return true; }, click: fin });
+    el.addEventListener('click', fin);
+  },
+
+  rajisStaff(id) { return STAFF[id]; },
+
+  // a word on the radio from one of the staff (bottom left, a few seconds)
+  rajisComms(id, text, ms = 4200) {
+    const S = STAFF[id];
+    if (!S) return;
+    this.root.querySelectorAll('.rj-comms').forEach(n => n.remove());
+    const el = h('div', 'rj-comms', `<div class="rc-face"></div><div><div class="rc-n" style="color:${S.color}">${S.name} <span>· ${S.title}</span></div><div class="rc-l"></div></div>`);
+    el.querySelector('.rc-face').appendChild(portraitIcon(id));
+    this.root.appendChild(el);
+    this.type(el.querySelector('.rc-l'), `"${text}"`, 20);
+    this.g.audio.radarPing();
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, ms);
   },
   async rajisExit() {
     const g = this.g, R = g.renderer;
@@ -304,11 +380,13 @@ export const AfterUI = {
     const saved = g.hasSavedRun() && g.meta.data.savedRun?.mode === 'rajis' ? g.meta.data.savedRun : null;
     const el = h('div', 'screen dim2 rj-menu');
     el.innerHTML = `<div class="rj-logo">RAJIS</div><div class="rj-sub">COMMAND ACCESS · OPERATOR LV ${d.level}</div><div class="menu"></div>
+      <div class="rj-staff">${STAFF_ORDER.map(id => `<div class="rs-card" data-id="${id}"><div class="rs-face"></div><div class="rs-n" style="color:${STAFF[id].color}">${STAFF[id].name}</div><div class="rs-t">${STAFF[id].title}</div><div class="rs-s">${R0.bosses?.[id] ? `DEFEATED ×${R0.bosses[id]}` : 'UNDEFEATED'}</div></div>`).join('')}</div>
       <div class="rj-stats">OPERATIONS ${R0.runs || 0} · COMPLETED ${R0.clears || 0}${R0.fastest ? ' · FASTEST ' + clock(R0.fastest) : ''}${R0.best ? ' · BEST ' + fmt(R0.best) : ''}</div>`;
+    el.querySelectorAll('.rs-card').forEach(c => c.querySelector('.rs-face').appendChild(portraitIcon(c.dataset.id)));
     const menu = el.querySelector('.menu');
     const defs = [
-      saved ? ['CONTINUE OPERATION', `OPERATION ${saved.op || '—'} · STOP ${saved.node + 1}/9`, () => { this.close(entry); this.transition(() => g.continueSavedRun()); }] : null,
-      ['START OPERATION', `9 STOPS · 2 BOSSES · RAJIS CORE${saved ? ' · REPLACES THE ONE IN PROGRESS' : ''}`, () => { this.close(entry); this.transition(() => g.startRun({ mode: 'rajis' })); }],
+      saved ? ['CONTINUE OPERATION', `OPERATION ${saved.op || '—'} · STOP ${saved.node + 1}/${saved.nodes?.length || 8}`, () => { this.close(entry); this.transition(() => g.continueSavedRun()); }] : null,
+      ['START OPERATION', `8 STOPS · 2 BOSSES · RAJIS CORE${saved ? ' · REPLACES THE ONE IN PROGRESS' : ''}`, () => { this.close(entry); this.transition(() => g.startRun({ mode: 'rajis' })); }],
       ['DOSSIER', 'COMMAND STAFF · PROTOCOLS · RECORDS', () => this.showRajisDossier()],
       ['RETURN TO THE CLUB', 'SIGNAL WILL BE LOST', () => this.rajisExit()],
     ].filter(Boolean);
@@ -376,9 +454,9 @@ export const AfterUI = {
   rajisBriefing(run, cb) {
     const g = this.g;
     const el = h('div', 'screen dim rj-brief');
-    const label = (n) => n.type === 'table' ? `MISSION · ${LOCATIONS[n.loc]?.name || ''}` : n.type === 'event' ? 'COMMAND · SITUATION' : n.type === 'shop' ? 'COMMAND · REQUISITIONS' : `${n.mini ? 'MINIBOSS' : n.boss === 'core' ? 'FINAL' : 'BOSS'} · ${RAJIS_BOSSES[n.boss].name}`;
+    const label = (n, i) => n.type === 'table' ? `MISSION · ${LOCATIONS[n.loc]?.name || ''} <small>ISSUED BY ${STAFF[staffFor(run, i)].name}</small>` : n.type === 'event' ? 'COMMAND · SITUATION' : n.type === 'shop' ? 'COMMAND · REQUISITIONS' : `${n.mini ? 'MINIBOSS' : n.boss === 'core' ? 'FINAL' : 'BOSS'} · ${RAJIS_BOSSES[n.boss].name}${n.boss === 'core' ? ' <small>EVERYONE, AT ONCE</small>' : ''}`;
     el.innerHTML = `<div class="panel rjb-box"><div class="rj-k">${glyphHTML('radar')} BRIEFING ${glyphHTML('radar')}</div><div class="title-bar chrome">OPERATION ${run.op}</div>
-      <ol class="rj-route">${run.nodes.map(n => `<li class="${n.type === 'boss' ? 'boss' : ''}">${label(n)}</li>`).join('')}</ol>
+      <ol class="rj-route">${run.nodes.map((n, i) => `<li class="${n.type === 'boss' ? 'boss' : ''}">${label(n, i)}</li>`).join('')}</ol>
       <div class="hint">HULL ${run.hearts} · CREDITS ${run.chips} · CLICK TO DEPLOY</div></div>`;
     let done = false;
     const fin = () => { if (done) return; done = true; g.audio.ui('select'); this.close(entry); cb(); };
@@ -391,6 +469,11 @@ export const AfterUI = {
     const el = h('div', 'screen letterbox rj-transmission');
     el.innerHTML = `<div class="rjt-k">${glyphHTML('warn')} INCOMING TRANSMISSION ${glyphHTML('warn')}</div><div class="rjt-row"><div class="rjt-face"></div><div><div class="boss-name chrome" style="text-align:left">${def.name}</div><div class="rjt-title" style="color:${def.color}">${def.title}</div></div></div><div class="rjt-lines"></div><div class="hint">${def.blurb}</div>`;
     el.querySelector('.rjt-face').appendChild(portraitIcon(def.id));
+    if (def.id === 'core') {
+      const row = h('div', 'rjt-all');
+      STAFF_ORDER.forEach((id, i) => { const c = h('div', 'rs-card mini', `<div class="rs-n" style="color:${STAFF[id].color}">${STAFF[id].name}</div>`); c.prepend(portraitIcon(id)); c.style.animationDelay = `${0.15 + i * 0.18}s`; row.appendChild(c); });
+      el.querySelector('.rjt-row').after(row);
+    }
     g.audio.siren(1.2);
     g.lights.lampMul = 0;
     g.room.alarm = true;

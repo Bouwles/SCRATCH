@@ -307,6 +307,14 @@ export class AudioEngine {
   }
 
   tick() { this.tone(2000, { type: 'square', dur: 0.02, vol: 0.04, filter: 4000 }); }
+  // the objective: a ball that counts, and progress that sticks (pitch rises as you close in)
+  countBlip() { if (this.ctx) this.tone(1480, { type: 'square', dur: 0.035, vol: 0.035, filter: 5000 }); }
+  progress(frac = 0) {
+    if (!this.ctx) return;
+    const t = this.now, base = 523.25 * Math.pow(2, Math.min(1, frac) * 0.75);
+    this.tone(base, { t, type: 'triangle', dur: 0.09, vol: 0.075 });
+    this.tone(base * 1.5, { t: t + 0.07, type: 'triangle', dur: 0.16, vol: 0.07, verb: 0.25 });
+  }
 
   // relic fanfares scale with rarity so a legendary *sounds* legendary
   relicGet(rarity = 'common') {
@@ -426,18 +434,35 @@ export class AudioEngine {
         s.connect(f).connect(g).connect(this.sfx); s.start();
         return { s, f, g };
       };
-      this.loopNodes = { roll: mk('lowpass', 210, 0.9), room: mk('lowpass', 420, 0.5) };
+      this.loopNodes = { roll: mk('lowpass', 210, 0.9), room: mk('lowpass', 420, 0.5), rain: mk('bandpass', 2600, 0.5), hum: mk('lowpass', 150, 1.2), crowd: mk('bandpass', 460, 0.9) };
       this.murmurT = setInterval(() => {
         if (!this.ambienceOn || Math.random() > 0.35) return;
-        const t = this.now;
-        if (Math.random() < 0.5) this.tone(2400 + Math.random() * 900, { t, type: 'sine', dur: 0.05, vol: 0.006, verb: 0.9 });
-        else this.noise({ t, dur: 2.2, vol: 0.006, type: 'bandpass', freq: 380 + Math.random() * 200, q: 0.8, attack: 0.9, verb: 0.5 });
+        const t = this.now, room = this.roomId || 'lounge';
+        const r = Math.random();
+        if (r < 0.3 && room !== 'hall') {
+          // glasses: two small taps (the lounge and the club have a bar)
+          if (room === 'lounge' || room === 'parlour') { const f = 2900 + Math.random() * 700; this.tone(f, { t, type: 'sine', dur: 0.08, vol: 0.006, verb: 0.8 }); this.tone(f * 1.34, { t: t + 0.07, type: 'sine', dur: 0.1, vol: 0.004, verb: 0.8 }); }
+          else if (room === 'loft' && Math.random() < 0.4) this.tone(310, { t, type: 'square', dur: 0.5, vol: 0.0025, filter: 500, verb: 0.9 });     // a car horn, far below
+        } else this.noise({ t, dur: 2.2, vol: room === 'hall' ? 0.009 : 0.006, type: 'bandpass', freq: 380 + Math.random() * 200, q: 0.8, attack: 0.9, verb: 0.5 });
       }, 2500);
+      // the private club has a clock on the wall
+      this.tickT = setInterval(() => { if (this.ambienceOn && this.roomId === 'parlour' && this.ctx) this.tone(2400, { type: 'square', dur: 0.012, vol: 0.0035, filter: 3000, verb: 0.5 }); }, 1000);
+      this.roomAmbience(this.roomId || 'lounge');
     } else if (!on && this.loopNodes) {
       for (const k of Object.values(this.loopNodes)) { try { k.s.stop(); } catch (e) { /* already stopped */ } k.g.disconnect(); }
       this.loopNodes = null;
-      clearInterval(this.murmurT);
+      clearInterval(this.murmurT); clearInterval(this.tickT);
+      if (this.verbSend) this.verbSend.gain.value = 0.3;
     }
+  }
+  // each Classic room sounds like itself; pool-ball audio always stays on top
+  roomAmbience(id) {
+    this.roomId = id;
+    if (!this.loopNodes || !this.ctx) return;
+    const on = this.ambienceOn ? 1 : 0;
+    const mix = { lounge: { room: 0.014, rain: 0.012, hum: 0, crowd: 0 }, parlour: { room: 0.012, rain: 0, hum: 0.006, crowd: 0 }, loft: { room: 0.01, rain: 0.006, hum: 0.02, crowd: 0 }, hall: { room: 0.008, rain: 0, hum: 0.014, crowd: 0.018 } }[id] || { room: 0.016 };
+    for (const k of ['room', 'rain', 'hum', 'crowd']) this.loopNodes[k].g.gain.setTargetAtTime((mix[k] || 0) * on, this.now, 0.6);
+    if (this.verbSend) this.verbSend.gain.setTargetAtTime(id === 'hall' ? 0.48 : id === 'loft' ? 0.36 : 0.3, this.now, 0.4);
   }
   setRoll(level) {
     if (!this.loopNodes) return;
@@ -445,7 +470,7 @@ export class AudioEngine {
   }
   setAmbience(on) {
     this.ambienceOn = on;
-    if (this.loopNodes) this.loopNodes.room.g.gain.setTargetAtTime(on ? 0.016 : 0, this.now, 0.5);
+    this.roomAmbience(this.roomId || 'lounge');
   }
 
   // ------------------------------------------------ reality switch sounds

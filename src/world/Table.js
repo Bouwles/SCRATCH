@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { TABLE } from '../config.js';
-import { ps1Material, disposeTree } from '../render/materials.js';
+import { ps1Material, disposeTree, shared } from '../render/materials.js';
 import { feltTexture, woodTexture, coneTexture, glowTexture, circleTexture, canvas, toTex } from '../render/textures.js';
 
 const { L, W, R } = TABLE;
@@ -38,6 +38,27 @@ function vortexTexture() {
     x.stroke();
   }
   return toTex(c, { wrap: false });
+}
+
+// the animated felt layer: additive, faint, dithered in PS1 mode
+export function feltFxMaterial(kind, color) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime: shared.uTime, uModern: shared.uModern, uKind: { value: kind }, uCol: { value: new THREE.Color(color) } },
+    vertexShader: `varying vec2 vP; void main() { vP = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      uniform float uTime, uKind, uModern; uniform vec3 uCol; varying vec2 vP;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      float bayer4(vec2 p) { ivec2 q = ivec2(mod(p, 4.0)); int i = q.x + q.y * 4; float m[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.); return (m[i] + 0.5) / 16.0; }
+      void main() {
+        float a = 0.0;
+        if (uKind < 1.5) { float s = fract(vP.x * 0.3 + vP.y * 0.18 - uTime * 0.055); a = smoothstep(0.0, 0.12, s) * smoothstep(0.26, 0.12, s) * 0.09; }
+        else if (uKind < 2.5) { vec2 c = floor(vP * 90.0); float h = hash(c); a = step(0.9965, h) * pow(0.5 + 0.5 * sin(uTime * 1.7 + h * 60.0), 10.0) * 0.8; }
+        else { vec2 g = abs(fract(vP * 5.0) - 0.5); float grid = step(0.475, max(g.x, g.y)) * 0.07; float ang = atan(vP.y, vP.x) / 6.2831853 + 0.5; float sw = fract(ang - uTime * 0.14); a = grid + exp(-sw * 10.0) * 0.1; }
+        if (uModern < 0.5) a = floor(a * 8.0 + bayer4(gl_FragCoord.xy) * 0.9) / 8.0;
+        gl_FragColor = vec4(uCol * a, 1.0);
+      }`,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  });
 }
 
 export class Table {
@@ -98,6 +119,24 @@ export class Table {
     feltTex.repeat.set(1, 1);
     const bed = new THREE.Mesh(bedGeo, felt);
     this.static.add(bed);
+    // a felt may bring a very quiet animated layer, or a head string
+    this.feltFx = null;
+    if (theme.feltFx) {
+      const kind = { sweep: 1, sparkle: 2, radar: 3 }[theme.feltFx] || 0;
+      const col = { sweep: 0xffe0b0, sparkle: 0xc8f0ff, radar: 0x8fd14f }[theme.feltFx] || 0xffffff;
+      const geo = new THREE.PlaneGeometry(2 * L, 2 * W); geo.rotateX(-Math.PI / 2);
+      const m = new THREE.Mesh(geo, feltFxMaterial(kind, col));
+      m.position.y = 0.0009; m.renderOrder = 1;
+      this.static.add(m);
+      this.feltFx = m;
+    }
+    if (theme.feltLine) {
+      const lm = ps1Material({ color: theme.feltLine, unlit: true, fog: 0.5 });
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 2 * W - 0.02).rotateX(-Math.PI / 2), lm);
+      line.position.set(TABLE.headX, 0.0008, 0); this.static.add(line);
+      const spot = new THREE.Mesh(new THREE.CircleGeometry(0.008, 12).rotateX(-Math.PI / 2), lm);
+      spot.position.set(TABLE.footX, 0.0008, 0); this.static.add(spot);
+    }
 
     // --- pocket holes (black discs + throats)
     for (const p of this.physics.pockets) {

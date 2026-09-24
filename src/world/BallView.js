@@ -4,7 +4,8 @@
 import * as THREE from 'three';
 import { TABLE } from '../config.js';
 import { ballMaterial, ps1Material } from '../render/materials.js';
-import { ballTexture, circleTexture, canvas, toTex } from '../render/textures.js';
+import { circleTexture, canvas, toTex } from '../render/textures.js';
+import { paintBall, hueFor } from '../render/ballpaint.js';
 
 const R = TABLE.R;
 
@@ -106,7 +107,7 @@ export class BallView {
     const key = ball.kind === 'golden' ? 'gold' : ball.kind === 'bonus' ? 'bonus' : ball.num;
     if (key === 'gold') return this.golden;
     if (key === 'bonus') return this.bonus || (this.bonus = bonusTexture());
-    if (!this.texCache.has(key)) this.texCache.set(key, this.skin.texture ? this.skin.texture(ball.num) : ballTexture(ball.num, this.skin.tex));
+    if (!this.texCache.has(key)) this.texCache.set(key, this.skin.texture ? this.skin.texture(ball.num) : paintBall(ball.num, this.skin, this.modern ? 'modern' : 'pixel'));
     return this.texCache.get(key);
   }
 
@@ -115,7 +116,12 @@ export class BallView {
     if (!v) {
       const skinMat = ball.kind === 'golden' ? { reflect: 0.8, spec: 2, rim: 0xffd040, rimAmt: 1, emissiveAmt: 0.4 }
         : ball.kind === 'bonus' ? { reflect: 0.4, spec: 1.6, rim: 0xff2bd6, rimAmt: 1, emissiveAmt: 0.6, fx: 3 } : this.skin.mat;
-      const mat = ballMaterial(this.texFor(ball), skinMat);
+      const mat = ballMaterial(this.texFor(ball), { ...skinMat, fx: ball.kind === 'golden' || ball.kind === 'bonus' ? skinMat.fx : this.skin.fx ?? skinMat.fx });
+      // which part of the ball the set's effect may touch (see ballpaint.js)
+      const n = ball.num;
+      mat.uniforms.uKind.value = ball.kind === 'golden' || ball.kind === 'bonus' ? 4 : n === 0 ? 0 : n === 8 ? 3 : n >= 9 ? 2 : 1;
+      if (this.skin.pal) mat.uniforms.uHue.value.set(hueFor(this.skin, n));
+      mat.uniforms.uSeed.value = (n * 7.31) % 10;
       const mesh = new THREE.Mesh(this.geo, mat);
       mesh.quaternion.setFromEuler(new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6));
       const shadow = new THREE.Mesh(this.shadowGeo, this.modern ? this.softMat : this.shadowMat);

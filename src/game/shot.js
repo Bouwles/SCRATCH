@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { TABLE, PHYS, ballColor } from '../config.js';
-import { cueSkinById } from './cosmetics.js';
+import { objectiveInfo, invalidPot, gainText } from './objectives.js';
 import { analyzeShot, heatFromSkill, styleAfterShot, styleGrade, STYLE_GRADES, STYLE_MULT, STYLE_COL, heatLevel, ROMAN, reactionWord } from './mastery.js';
 
 const R = TABLE.R;
@@ -143,16 +143,8 @@ export const ShotMixin = {
       this.screenFlash(0xffffff, 0.12);
       this.table.sway += 0.25;
     }
-    // trails for all balls (they only draw when fast)
-    const cs = cueSkinById(this.meta.data.selected.cue);
-    this.cueTrailKind = S.house ? null : cs.trail?.kind || null;
-    this.cueTrailColor = cs.trail?.color || '#ffffff';
-    const skin = this.ballView.skin;
-    for (const b of this.physics.balls) {
-      if (b.state !== 'table') continue;
-      const col = b.kind === 'cue' ? (cs.trail?.color || '#ffffff') : (skin.trail || (b.kind === 'golden' ? '#ffd040' : ballColor(b.num)));
-      this.fx.trail(b, col, b.kind === 'cue' ? 0.045 : 0.035);
-    }
+    // shot trails (the loadout's TRAIL slot); they only draw while balls are fast
+    this.startTrails(S.house);
     if (S.doubleTap) {
       this.later(0.35, () => {
         if (cue.state !== 'table') return;
@@ -167,7 +159,7 @@ export const ShotMixin = {
     if (S.house) {
       this.later(0.4, () => {
         const m = this.cue.mesh.material.uniforms;
-        m.uColor.value.set(0xffffff); m.uEmissive.value.setScalar(cueSkinById(this.meta.data.selected.cue).mat?.emissive || 0);
+        m.uColor.value.set(0xffffff); m.uEmissive.value.setScalar(this.cue.baseEmit || 0);
       });
     }
   },
@@ -194,17 +186,7 @@ export const ShotMixin = {
     if (S.simTime > 22) {
       for (const b of this.physics.balls) { b.vx = b.vz = 0; b.wx = b.wy = b.wz = 0; }
     }
-    // special cues leave special trails
-    const cue = this.physics.cue;
-    const kind = this.cueTrailKind;
-    if (kind && cue && cue.state === 'table') {
-      const cs = cue.speed;
-      if (cs > 0.8 && Math.random() < Math.min(1, cs * 0.4)) {
-        if (kind === 'fire') this.fx.spawn(cue.x, 0.03, cue.z, (Math.random() - 0.5) * 0.3, 0.4 + Math.random() * 0.5, (Math.random() - 0.5) * 0.3, Math.random() < 0.5 ? 0xff6010 : 0xffd040, 0.4, 2, { grav: -0.5, drag: 3 });
-        else if (kind === 'spark') this.fx.spawn(cue.x, 0.03, cue.z, (Math.random() - 0.5) * 0.6, Math.random() * 0.6, (Math.random() - 0.5) * 0.6, this.cueTrailColor, 0.35, 1, { flicker: true });
-        else if (kind === 'glitch') this.fx.spawn(cue.x + (Math.random() - 0.5) * 0.05, 0.03, cue.z + (Math.random() - 0.5) * 0.05, 0, 0, 0, [0xff00ff, 0x00ffff, 0x00ff40][Math.floor(Math.random() * 3)], 0.25, 2, { grav: 0, flicker: true });
-      }
-    }
+    this.trailTick(dt);
     if (this.enc?.feverXL) this.physics.pockets.forEach((p, i) => { if (p.open) p.scale = 1.4 + Math.sin(this.time * 1.3 + i * 1.7) * 0.8; });
     // music reacts to table speed
     const sp = this.physics.maxSpeed();
@@ -287,9 +269,7 @@ export const ShotMixin = {
     const pos = this.worldPos(p.x, p.z, 0.02);
     const col = b.kind === 'golden' ? 0xffd040 : new THREE.Color(ballColor(b.num)).getHex();
     this.audio.pocket(sp, p.x);
-    this.fx.burst(p.x, 0.02, p.z, [col, 0xffffff], 18 + Math.floor(sp * 8), 0.8 + sp * 0.4, { up: 1.6, minUp: 0.5, life: 0.7 });
-    this.fx.ring(p.x, p.z, col, 0.22, 0.35);
-    this.lights.flash(this.worldPos(p.x, p.z, 0.25), col, 1.4, 2.2, 0.35);
+    this.pocketFx(p, col, sp);
     this.bump(p.x - this.physics.cue?.x || 0, p.z - (this.physics.cue?.z || 0), 0.01);
 
     if (b.kind === 'cue') {
@@ -314,6 +294,7 @@ export const ShotMixin = {
       S.devoured.push(b);
       S.pots.push(pot);
       this.ui.worldPop('DEVOURED', pos, '#9a4bff');
+      this.ui.encFeedback('DEVOURED · DOES NOT COUNT', 'bad', 1800); S.explained = true;
       this.audio.tone(50, { type: 'sine', dur: 0.8, vol: 0.5, slide: 25 });
       return;
     }
@@ -348,6 +329,9 @@ export const ShotMixin = {
     }
     if (p.mark === 'hi' && counted) { S.dealerHi = (S.dealerHi || 0) + 1; this.ui.worldPop('HIGH CARD', pos, '#ffd040', 1.2); this.audio.coin(4); }
     if (p.mark === 'bad' && counted) { pot.counted = false; S.counted--; S.dealerBad = (S.dealerBad || 0) + 1; this.ui.worldPop('BUSTED', pos, '#ff3040', 1.2); this.audio.groan(); counted = false; }
+    // a pot that does not count says why, right above the bar
+    if (!counted && this.enc && !this.enc.done) { const why = invalidPot(this, this.enc, S, pot); if (why) { this.ui.encFeedback(why, 'bad', 1900); S.explained = true; } }
+    else if (counted) this.audio.countBlip?.();
     if (b.tags.giant) { S.lines.push(['GIANT POT', 1500]); this.ui.popup('GIANT!', { color: '#ff8a1b', scale: 1.6 }); }
     if (this.enc?.challenge?.pot) this.challengeCheck(this.enc.challenge.pot(this, this.enc, S, pot));
     if (this.enc?.stake?.pot) this.stakeCheck(this.enc.stake.pot(this, this.enc, S, pot));
@@ -355,7 +339,7 @@ export const ShotMixin = {
     const k = S.pots.filter(q => !q.house && !q.devoured).length;
     this.freeze(0.03 + Math.min(0.04, sp * 0.01));
     this.audio.potJingle(k);
-    let label = counted ? '+100' : 'NO COUNT';
+    let label = counted ? (this.run?.mode === 'rajis' ? 'TARGET DESTROYED' : '+100') : 'NO COUNT';
     if (pot.bank && counted) label = 'BANK!';
     if (pot.kiss && counted) label = 'CAROM!';
     this.ui.worldPop(label, pos, counted ? '#ffffff' : '#808090');
@@ -395,6 +379,57 @@ export const ShotMixin = {
     if (e && counted && !e.done && e.progress + S.counted >= e.goal && def.id !== 'combo') {
       this.slowmo(0.35, 0.6);
     }
+  },
+
+  // ---- cosmetics: shot trails and pocket effects (the loadout decides which)
+  startTrails(house = false) {
+    const kind = house ? 'light' : this.trailKind || 'light';
+    if (kind === 'off') return;
+    const ribbon = { light: null, electric: '#6ac8ff', fire: '#ff6a18', void: '#9a4bff' };
+    if (!(kind in ribbon)) return;                      // pixel / radar leave marks, not ribbons
+    const skin = this.ballView.skin;
+    for (const b of this.physics.balls) {
+      if (b.state !== 'table') continue;
+      const col = ribbon[kind] || (b.kind === 'cue' ? '#ffffff' : skin.trail || (b.kind === 'golden' ? '#ffd040' : ballColor(b.num)));
+      this.fx.trail(b, col, (b.kind === 'cue' ? 0.042 : 0.032) * (kind === 'electric' ? 0.6 : 1));
+    }
+  },
+  trailTick(dt) {
+    const kind = this.trailKind;
+    if (!kind || kind === 'off' || kind === 'light' || this.shot?.house) return;
+    this.trailAcc = (this.trailAcc || 0) + dt;
+    if (this.trailAcc < 1 / 40) return;
+    this.trailAcc = 0;
+    for (const b of this.physics.balls) if (b.state === 'table') this.trailMark(this.fx, kind, b);
+  },
+  // one tick of a trail's marks behind one ball (also used by the loadout preview)
+  trailMark(fx, kind, b) {
+    const sp = Math.hypot(b.vx, b.vz);
+    if (sp < 1.1) return;
+    // marks go down behind the ball, never on top of it
+    const bx = b.x - b.vx / sp * b.r * 1.6, bz = b.z - b.vz / sp * b.r * 1.6;
+    const R = Math.random;
+    if (kind === 'pixel' && R() < 0.8) fx.spawn(bx, 0.02, bz, 0, 0, 0, b.kind === 'cue' ? 0xffffff : new THREE.Color(ballColor(b.num)).getHex(), 0.3, 3, { grav: 0 });
+    else if (kind === 'electric' && R() < 0.25) fx.spawn(bx, 0.03, bz, (R() - 0.5) * 0.8, R() * 0.4, (R() - 0.5) * 0.8, 0xa0e8ff, 0.18, 1, { flicker: true, grav: 0 });
+    else if (kind === 'fire' && R() < 0.5) fx.spawn(bx, 0.03, bz, (R() - 0.5) * 0.2, 0.3 + R() * 0.3, (R() - 0.5) * 0.2, R() < 0.5 ? 0xff6010 : 0xffc040, 0.3, 2, { grav: -0.6, drag: 3 });
+    else if (kind === 'void' && R() < 0.35) fx.spawn(bx, 0.05, bz, 0, -0.08, 0, R() < 0.5 ? 0x9a4bff : 0x40ffe0, 0.45, 1, { grav: 0.1, drag: 1 });
+    else if (kind === 'radar' && R() < 0.5) fx.spawn(bx, 0.004, bz, 0, 0, 0, 0x8fd14f, 0.55, 2, { grav: 0 });
+  },
+  pocketFx(p, col, sp) { this.pocketEffect(this.fx, this.pocketKind || 'classic', p, col, sp, true); },
+  // a ball dropping, the way the loadout's POCKET FX slot says (lights only on the real table)
+  pocketEffect(fx, kind, p, col, sp, lit = false) {
+    const flash = (c, k = 1) => { if (lit) this.lights.flash(this.worldPos(p.x, p.z, 0.25), c, 1.4 * k, 2.2, 0.35); };
+    const later = (d, fn) => (lit ? this.later(d, fn) : setTimeout(fn, d * 1000));
+    if (kind === 'quiet') { fx.ring(p.x, p.z, 0xffffff, 0.12, 0.25); return; }
+    if (kind === 'pixel') { fx.burst(p.x, 0.02, p.z, [col, 0xffffff], 10 + Math.floor(sp * 4), 0.7, { up: 1.2, minUp: 0.4, life: 0.5, size: 3 }); flash(col, 0.7); return; }
+    if (kind === 'sparks') { fx.burst(p.x, 0.02, p.z, [0xffffff, 0xffe8a0, col], 22, 2.2, { up: 1.1, minUp: 0.3, life: 0.28, size: 1, flicker: true, grav: 5 }); flash(0xfff0c0, 0.8); return; }
+    if (kind === 'neon') { fx.ring(p.x, p.z, 0xff2bd6, 0.26, 0.35); fx.ring(p.x, p.z, 0x2bf0ff, 0.18, 0.45); flash(0xff2bd6, 1.3); return; }
+    if (kind === 'holo') { [0, 0.09, 0.18].forEach((d, i) => later(d, () => fx.ring(p.x, p.z, i === 1 ? 0xffffff : 0x40e8ff, 0.16 + i * 0.07, 0.45))); flash(0x40e8ff, 0.8); return; }
+    if (kind === 'smoke') { for (let i = 0; i < 12; i++) fx.spawn(p.x + (Math.random() - 0.5) * 0.04, 0.02, p.z + (Math.random() - 0.5) * 0.04, (Math.random() - 0.5) * 0.1, 0.15 + Math.random() * 0.15, (Math.random() - 0.5) * 0.1, Math.random() < 0.5 ? 0x8a8a90 : 0x5a5a60, 0.9 + Math.random() * 0.5, 3, { grav: -0.05, drag: 1.2 }); return; }
+    if (kind === 'lockon') { fx.lockon(p.x, p.z); if (lit) this.audio.tone(1760, { type: 'square', dur: 0.05, vol: 0.05, filter: 5000 }); flash(0xff3b30, 0.8); return; }
+    fx.burst(p.x, 0.02, p.z, [col, 0xffffff], 18 + Math.floor(sp * 8), 0.8 + sp * 0.4, { up: 1.6, minUp: 0.5, life: 0.7 });
+    fx.ring(p.x, p.z, col, 0.22, 0.35);
+    flash(col);
   },
 
   // arcade break: the rack bursts outward on a hard break
@@ -557,21 +592,26 @@ export const ShotMixin = {
           if (this.run.hearts <= 0) { this.shot = null; this.after(1.0, () => this.endRun(false)); return; }
         } else {
           e.shots = Math.max(0, e.shots - 2);
-          this.ui.popup('EARLY EIGHT!  -2 SHOTS', { color: '#ff3040', scale: 1.2 });
+          this.ui.popup('EARLY EIGHT!', { color: '#ff3040', scale: 1.2 });
+          this.ui.encFeedback('THE 8 WENT DOWN EARLY · -2 SHOTS · IT COMES BACK', 'bad', 2600);
         }
+        S.explained = true;
         this.later(0.4, () => this.spawnDropBall(8, 'object', TABLE.footX, 0));
       } else eightFinish = true;
     }
     if (def.classic && S.eight && !won) {
       e.shots = Math.max(0, e.shots - 3);
       S.lines.push(['EARLY EIGHT', -300]);
-      this.ui.popup('EARLY EIGHT!  -3 SHOTS', { color: '#ff3040', scale: 1.2 });
+      this.ui.popup('EARLY EIGHT!', { color: '#ff3040', scale: 1.2 });
+      this.ui.encFeedback('THE 8 BEFORE THE SOLIDS · -3 SHOTS · IT COMES BACK', 'bad', 2600);
+      S.explained = true;
       this.later(0.4, () => this.spawnDropBall(8, 'object', TABLE.footX, 0));
     }
     if (def.cap && delta > def.cap) {
       delta = def.cap;
-      this.ui.popup(`${def.name} ALLOWS ONLY ${def.cap}`, { color: def.color || '#ff3b5c' });
+      this.ui.encFeedback(`ONLY ${def.cap} POTS COUNT PER SHOT HERE`, 'warn', 2200);
     }
+    const before = e.progress;
     e.progress = Math.max(0, e.progress + delta);
     won = e.progress >= e.goal;
 
@@ -691,7 +731,8 @@ export const ShotMixin = {
       if (e.scratches >= 3) this.achieve('why');
       const cost = S.insured ? 0 : e.mods?.some(m => m.scratchCost) ? 3 : 1;
       if (!won) e.shots = Math.max(0, e.shots - cost);
-      this.ui.popup(cost ? `SCRATCH  -${cost} SHOT${cost > 1 ? 'S' : ''}` : 'SCRATCH — INSURED', { color: cost ? '#ff3040' : '#2b6bff' });
+      const left = won || def.id === 'blitz' || this.run.oneCue ? '' : e.shots === 1 ? ' · FINAL SHOT NEXT' : ` · ${e.shots} SHOTS LEFT`;
+      this.ui.encFeedback(cost ? `SCRATCH · -${cost} SHOT${cost > 1 ? 'S' : ''}${left}` : 'SCRATCH · INSURED · NO SHOT LOST', cost ? 'bad' : 'info', 2300);
       if (e.challenge?.scratch) this.challengeCheck(e.challenge.scratch(this, e, S));
       if (e.stake?.scratch) this.stakeCheck(e.stake.scratch(this, e, S));
     }
@@ -705,6 +746,7 @@ export const ShotMixin = {
       if (this.run.hearts <= 0) { this.saveRun(); this.after(1.2, () => this.endRun(false)); return; }
     }
 
+    this.shotFeedback(S, e, e.progress - before, npots);
     this.ui.updateHUD(true);
 
     // THE CLOCK: trick shots buy time back
@@ -754,6 +796,23 @@ export const ShotMixin = {
     else this.beginAim();
   },
 
+  // what that shot did for the objective, in words (feedback line above the bar)
+  shotFeedback(S, e, gained, npots) {
+    const ui = this.ui, def = e.def;
+    if (e.done) return;
+    const o = objectiveInfo(this, e);
+    const quiet = def.id === 'blitz' || this.run.oneCue || e.kind === 'trickshot';
+    const left = quiet || e.progress >= e.goal ? '' : e.shots === 1 ? ' · FINAL SHOT NEXT' : e.shots <= 0 ? '' : ` · ${e.shots} SHOTS LEFT`;
+    if (gained > 0) { ui.encFeedback(gainText(o, gained), 'good', 1800); return; }
+    if (gained < 0) { ui.encFeedback(def.id === 'chain' ? 'NOTHING POTTED · THE CHAIN BREAKS · BACK TO 0' : def.id === 'route' ? 'MISSED THE ROUTE · THE ROUTE RESETS' : `PROGRESS LOST${left}`, 'bad', 2300); return; }
+    if (S.scratch || S.explained) return;
+    if (!npots) { ui.encFeedback(e.kind === 'trickshot' ? 'NOT QUITE · TRY AGAIN' : `MISS${left}`, 'bad', 1800); return; }
+    if (def.id === 'trick' && S.counted > 0) { ui.encFeedback('YOUR CUE BALL NEVER HIT A CUSHION · NO COUNT', 'bad', 2400); return; }
+    if (def.id === 'combo') { ui.encFeedback('ONLY 1 BALL · A COMBO NEEDS 2 OR MORE', 'bad', 2200); return; }
+    if (e.kind === 'trickshot') { ui.encFeedback('NOT QUITE · TRY AGAIN', 'bad', 1800); return; }
+    ui.encFeedback(`NO PROGRESS${left}`, 'bad', 1800);
+  },
+
   houseTurn(playerScratched) {
     this.ui.popup('THE HOUSE PLAYS', { color: '#2bf0ff', scale: 1.3 });
     this.audio.tone(55, { type: 'sawtooth', dur: 0.8, vol: 0.2, filter: 400 });
@@ -769,6 +828,7 @@ export const ShotMixin = {
     if (stolen) {
       e.progress = Math.max(0, e.progress - stolen);
       this.ui.popup(`THE HOUSE STEALS ${stolen}`, { color: '#2bf0ff', scale: 1.3 });
+      this.ui.encFeedback(`THE HOUSE STOLE ${stolen} · ${objectiveInfo(this, e).count}`, 'bad', 2400);
       this.audio.fail();
     } else {
       this.ui.popup('THE HOUSE MISSES', { color: '#ffffff' });
@@ -787,6 +847,15 @@ export const ShotMixin = {
   // -------------------------------------------------------- aim / place
   beginAim() {
     if (this.runEnding || !this.enc || this.enc.done) return;
+    // a boss that just changed phase holds the table for a moment
+    if (this.enc.holdUntil && this.time < this.enc.holdUntil) {
+      this.state = 'hold';
+      this.cue.visible = false;
+      const wait = this.enc.holdUntil - this.time;
+      this.enc.holdUntil = 0;
+      this.after(wait, () => this.beginAim());
+      return;
+    }
     this.state = 'aim';
     this.charge = 0;
     this.aimStart = this.time;
@@ -799,9 +868,9 @@ export const ShotMixin = {
     this.pointAim();
     this.audio.setIntensity(this.enc?.def.boss ? 0.9 : 0.55);
     const e = this.enc;
-    if (e.def.id !== 'blitz' && e.shots === 1 && !e.lastShotWarned) {
+    if (e.def.id !== 'blitz' && e.shots === 1 && !e.lastShotWarned && !this.run?.oneCue) {
       e.lastShotWarned = true;
-      this.ui.popup('LAST SHOT!', { color: '#ff3b5c', scale: 1.4 });
+      this.ui.encFeedback(e.kind === 'trickshot' ? 'LAST ATTEMPT' : 'FINAL SHOT · MAKE IT COUNT', 'bad', 2400);
       this.audio.heartbeat();
       this.audio.setIntensity(1);
     }

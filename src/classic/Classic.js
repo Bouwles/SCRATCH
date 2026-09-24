@@ -9,17 +9,16 @@ import { envTexture } from '../render/textures.js';
 import { Lounge } from './Lounge.js';
 import { ClassicAim } from './aim.js';
 import { ClassicUI } from './ClassicUI.js';
-import { FELTS, LIGHTS, CUES, byId, tableTheme, ballSkin, cueSkin } from './look.js';
+import { FELTS, LIGHTS, CUES, BALLS, ROOMS, byId, tableTheme, ballSkin, cueSkin } from './look.js';
+import { cueSkinById as cueSkinOf } from '../game/cosmetics.js';
 import { evaluate, groupOf, otherGroup, legalTargets, SOLIDS, STRIPES } from './rules.js';
 import { plan, execute, LEVELS, STYLES, powerForSpeed, BREAK_SPEED } from './ai.js';
+import { OPPONENTS, oppById, formatById, CLEVEL_XP } from './people.js';
+import { readShot } from './labels.js';
+import { DRILLS } from './drills.js';
 
-// the four-player house tournament: you and three regulars
-const REGULARS = [
-  { name: 'Marguerite', style: 'positional' }, { name: 'Ossie', style: 'aggressive' }, { name: 'Deacon', style: 'cautious' },
-  { name: 'Juno', style: 'trickster' }, { name: 'Rafe', style: 'aggressive' }, { name: 'Ilse', style: 'positional' },
-  { name: 'Tobias', style: 'cautious' }, { name: 'Nell', style: 'balanced' },
-];
 const STRENGTH = { easy: 1, normal: 2, hard: 3, expert: 4 };
+const newStats = () => ({ pots: 0, fouls: 0, banks: 0, longest: 0, safeties: 0, shotTime: 0, shots: 0 });
 
 const R = TABLE.R;
 
@@ -69,7 +68,7 @@ export class Classic {
     g.ballView.syncObstacles();
     this.applyRender();                      // modern path first, so new materials are built for it
     this.applyLook(true);
-    g.camStyle = this.s.camera === 'top' ? 'top' : 'cinematic';
+    g.camStyle = this.s.camera === 'top' ? 'top' : this.s.camera === 'cue' ? 'cue' : 'cinematic';
     g.audio.loops(true);
     g.audio.setAmbience(this.s.ambience);
     this.menuTable();
@@ -117,6 +116,7 @@ export class Classic {
     g.table.lampGroup.visible = false;
     if (rebuildRoom || !this.lounge.group.children.length || this.lounge.roomId !== (d.room || 'lounge')) this.lounge.build(light, d.room || 'lounge');
     else this.lounge.setLighting(light);
+    g.audio.roomAmbience(d.room || 'lounge');
     shared.uAmbient.value.setRGB(...light.ambient);
     shared.uSky.value.setRGB(...light.sky);
     shared.uGround.value.setRGB(...light.ground);
@@ -126,8 +126,7 @@ export class Classic {
     shared.uEnvMap.value?.dispose();
     shared.uEnvMap.value = envTexture({ env: ['#2a2018', '#4a3626', '#2a1c14'], lamp: '#fff0d8', neon: ['#c8a060', '#8a6a40'], felt: byId(FELTS, d.felt).felt });
     g.ballView.setSkin(ballSkin(d.balls));
-    const cue = CUES.find(c => c.id === d.cue);
-    const cueOk = !cue?.ach || g.meta.data.achievements[cue.ach] || g.state === 'cmenu';
+    const cueOk = g.meta.isUnlocked(cueSkinOf(d.cue));
     g.cue.setSkin(cueSkin(cueOk ? d.cue : 'wood'));
     const G = g.renderer.grade;
     G.lift.set(0.008, 0.006, 0.004); G.gain.set(1.03, 1.0, 0.96); G.sat = 1.04; G.desat = 0;
@@ -184,19 +183,23 @@ export class Classic {
     return style && style !== 'balanced' ? `${lv} · ${STYLES[style].name}` : lv;
   }
 
-  startMatch(cfg) {
+  // cfg: { type: 'ai'|'local'|'practice', names, opp, level, style, format, clock, tourney, drill, quick }
+  startMatch(cfg, { fast = false } = {}) {
     const g = this.g;
     this.cfg = cfg;
-    const cue = CUES.find(c => c.id === this.data.look.cue);
-    if (cue?.ach && !g.meta.data.achievements[cue.ach]) { this.data.look.cue = 'wood'; this.save(); g.cue.setSkin(cueSkin('wood')); }
+    if (!g.meta.isUnlocked({ ...cueSkinOf(this.data.look.cue), kind: 'cue' })) { this.data.look.cue = 'wood'; this.save(); g.cue.setSkin(cueSkin('wood')); }
+    const opp = cfg.type === 'ai' ? oppById(cfg.opp) : null;
+    const style = opp ? (cfg.style && cfg.style !== 'auto' ? cfg.style : opp.style) : null;
     const players = cfg.type === 'ai'
-      ? [{ name: cfg.names[0] || 'Player', ai: false }, { name: cfg.oppName || this.aiName(cfg.level, cfg.style), ai: true, style: cfg.style || 'balanced' }]
+      ? [{ name: cfg.names[0] || 'Player', ai: false }, { name: opp.name, ai: true, style, opp: opp.id }]
       : cfg.type === 'local' ? [{ name: cfg.names[0] || 'Player 1', ai: false }, { name: cfg.names[1] || 'Player 2', ai: false }]
       : [{ name: 'Practice', ai: false }];
+    const fmt = formatById(cfg.format);
     this.match = {
-      type: cfg.type, level: cfg.level || 'normal', bestOf: cfg.bestOf || 1, clock: cfg.type === 'practice' ? 0 : cfg.clock || 0,
+      type: cfg.type, level: cfg.level || 'normal', format: fmt.id, need: fmt.need, bestOf: fmt.need * 2 - 1, clock: cfg.type === 'practice' ? 0 : cfg.clock || 0,
       players: players.map(p => ({ ...p, group: null })), wins: [0, 0], frame: 0, breaker: 0, turn: 0,
       inHand: false, kitchen: false, isBreak: false, layout: 'rack', tourney: cfg.tourney || null, visit: 0, clockLeft: 0,
+      ps: [newStats(), newStats()], opp, drill: cfg.drill || null,
     };
     this.paused = false;
     this.ui.closeAll();
@@ -206,16 +209,20 @@ export class Classic {
     g.cue.visible = false;
     if (cfg.type === 'practice') {
       this.ui.hud(true);
-      this.practiceRack('rack');
+      if (cfg.drill) this.startDrill(cfg.drill); else this.practiceRack('rack');
       return;
     }
     g.camMode = 'intro';
+    g.introT = 0;
     g.physics.clearBalls();
     g.ballView.prune();
-    this.ui.matchIntro(this.match, () => this.startFrame());
+    const go = () => (fast ? this.ui.banner('Rematch', 900, () => this.startFrame()) : this.ui.matchIntro(this.match, () => this.startFrame()));
+    // the very first Classic match: four lines, then play
+    if (!this.data.introDone) { this.data.introDone = true; this.save(); this.ui.firstTime(go); } else go();
   }
 
-  rematch() { if (this.cfg?.tourney) { this.toMenu(); return; } this.startMatch(this.cfg); }
+  // a rematch is nearly instant: same table, same opponent, no long intro
+  rematch() { if (this.cfg?.tourney) { this.toMenu(); return; } this.startMatch(this.cfg, { fast: true }); }
 
   startFrame() {
     const g = this.g, m = this.match;
@@ -230,9 +237,9 @@ export class Classic {
     g.camMode = 'intro';
     this.ui.hud(true);
     this.ui.updateHUD();
-    g.after(1.0, () => {
+    g.after(0.9, () => {
       if (this.match !== m) return;
-      this.ui.banner(`${m.players[m.turn].name} to break`);
+      this.ui.banner(m.frame > 1 ? `Frame ${m.frame} · ${m.players[m.turn].name} to break` : `Break · ${m.players[m.turn].name}`);
       this.beginTurn();
     });
   }
@@ -274,6 +281,7 @@ export class Classic {
     this.aim.showHead(m.inHand && m.kitchen);
     m.clockLeft = m.clock;
     m.clockTick = Math.ceil(m.clock);
+    m.turnT0 = g.time;
     if (m.type !== 'practice' && p.ai) { this.startAI(); return; }
     g.charge = 0;
     if (m.inHand && !m.isBreak) {
@@ -394,6 +402,8 @@ export class Classic {
   beginShot(S) {
     const g = this.g, m = this.match;
     S.house = false; S.simTime = 0; S.settle = 0;
+    if (m.ps && m.type !== 'practice') { const st = m.ps[m.turn]; st.shots++; st.shotTime += Math.min(120, g.time - (m.turnT0 ?? g.time)); }
+    this.slowDone = false;
     this.rec = { firstHit: null, pots: [], potBalls: [], railAfter: false, rails: new Set(), isBreak: m.isBreak, power: S.power, broke: false };
     this.onTableBefore = this.onTableSet();
     this.snapshot = g.physics.balls.filter(b => b.state === 'table').map(b => ({ num: b.num, x: b.x, z: b.z }));
@@ -414,6 +424,9 @@ export class Classic {
     g.cueFollow = 0.25;
     g.audio.cCue(S.power);
     if (this.rec?.isBreak) { g.fovPunch = 0.25 + S.power * 0.35; g.bump(-dx, -dz, 0.01); }
+    // trails only if the player asked for them (Classic defaults to none)
+    g.trailKind = this.data.look.trail || 'off';
+    if (g.trailKind !== 'off' && g.meta.s.trails !== false) g.startTrails(); else g.trailKind = 'off';
   }
 
   simTick(dt) {
@@ -425,9 +438,32 @@ export class Classic {
       if (S.settle > 0.3) this.resolve();
     } else S.settle = 0;
     if (S.simTime > 25) for (const b of g.physics.balls) { b.vx = b.vz = 0; b.wx = b.wy = b.wz = 0; }
+    this.matchPointSlowmo();
+    if (g.trailKind && g.trailKind !== 'off') g.trailTick(dt);
     let roll = 0;
     for (const b of g.physics.balls) if (b.state === 'table') roll += Math.hypot(b.vx, b.vz);
     g.audio.setRoll(roll);
+  }
+
+  // Only now and then: the 8 rolling toward a pocket for the match (or the tournament)
+  matchPointSlowmo() {
+    const g = this.g, m = this.match, r = this.rec;
+    if (this.slowDone || !m || !r || m.type === 'practice' || r.isBreak) return;
+    const p = m.players[m.turn];
+    const onEight = p.group && [...this.onTableBefore].every(n => n === 8 || (p.group === 'solids' ? n > 8 : n < 8));
+    if (!onEight || m.wins[m.turn] + 1 < m.need) return;
+    const b8 = g.physics.balls.find(b => b.num === 8 && b.state === 'table');
+    if (!b8 || r.firstHit !== 8) return;
+    const sp = Math.hypot(b8.vx, b8.vz);
+    if (sp < 0.15) return;
+    for (const pk of g.physics.pockets) {
+      const dx = pk.x - b8.x, dz = pk.z - b8.z, dist = Math.hypot(dx, dz);
+      if (dist < 0.22 && (dx * b8.vx + dz * b8.vz) / (dist * sp) > 0.93) {
+        this.slowDone = true;
+        g.slowmo(0.28, 0.75);
+        return;
+      }
+    }
   }
 
   onPhysics(type, a, b, c, d) {
@@ -454,6 +490,8 @@ export class Classic {
       if (a.kind !== 'cue') r.rails.add(a.id);
     } else if (type === 'pocket') {
       g.audio.cPocket(c, pan(b.x));
+      const pk = this.data.look.pocket;
+      if (pk && pk !== 'quiet') g.pocketEffect(g.fx, pk, b, a.kind === 'cue' ? 0xffffff : 0xffe0a0, c, false);
       if (!r) return;
       r.pots.push(a.kind === 'cue' ? 0 : a.num);
       r.potBalls.push(a);
@@ -476,13 +514,23 @@ export class Classic {
     const p = m.players[m.turn], opp = m.players[1 - m.turn];
     const out = evaluate({ group: p.group, isBreak: m.isBreak, onTable: this.onTableBefore }, { firstHit: r.firstHit, pots: r.pots, railAfter: r.railAfter, breakRails: r.rails.size });
     const scratch = r.pots.includes(0);
+    const own = r.potBalls.filter(b => b.kind !== 'cue');
+    if (out.assign && !p.group) { p.group = out.assign; opp.group = otherGroup(out.assign); }
 
+    // what kind of shot that was (recognition only)
+    const read = readShot(g.physics, r, out, p, opp);
+    const ms = m.ps[m.turn];
+    ms.pots += out.foul || out.lose ? 0 : own.length; ms.banks += read.banks; ms.longest = Math.max(ms.longest, read.longest);
+    if (read.safety) ms.safeties++;
+    if (out.foul) ms.fouls++;
+    if (read.labels.length) this.ui.shotLabel(read.labels, read.safety && !p.ai);
     // statistics for the humans at the table
     if (!p.ai) {
       const st = this.data.stats;
-      const own = r.potBalls.filter(b => b.kind !== 'cue');
       st.potted += own.length;
       for (const b of own) st.longest = Math.max(st.longest, Math.round(b.travel * 100) / 100);
+      st.banks = (st.banks || 0) + read.banks;
+      if (read.safety) st.safeties = (st.safeties || 0) + 1;
     }
 
     if (out.rerack) {
@@ -506,11 +554,7 @@ export class Classic {
       this.endFrame(winner, `${p.name} ${out.endReason}.`);
       return;
     }
-    if (out.assign) {
-      p.group = out.assign;
-      opp.group = otherGroup(out.assign);
-      this.ui.notice(`${p.name} · ${out.assign === 'solids' ? 'Solids' : 'Stripes'}`, `${opp.name} has ${opp.group}.`, 'soft');
-    }
+    if (out.assign) this.ui.notice(`${p.name} · ${out.assign === 'solids' ? 'Solids' : 'Stripes'}`, `${opp.name} has ${opp.group}.`, 'soft');
     const wasBreak = m.isBreak;
     m.isBreak = false;
     if (scratch) this.respawnCue();
@@ -549,15 +593,22 @@ export class Classic {
     const st = this.data.stats;
     st.frames++;
     if (!w.ai && m.type === 'ai') st.framesWon = (st.framesWon || 0) + 1;
-    if (winner === m.breakerNow && m.breakRun && !w.ai) { st.breakRuns++; reason = 'Break and run.'; }
+    let bnr = false;
+    if (winner === m.breakerNow && m.breakRun && !w.ai && m.type !== 'practice') {
+      st.breakRuns++; reason = 'Break and run.'; bnr = true;
+      this.addXP(150);
+      const a = g.meta.achieve('break_run');
+      if (a) this.ui.achievement(a.name);
+    }
     this.save();
     this.ui.updateHUD();
     g.state = 'cwait';
     this.aim.hide();
-    const need = Math.ceil(m.bestOf / 2);
-    if (m.wins[winner] >= need) { g.after(1.2, () => this.endMatch(winner, reason)); return; }
+    if (bnr) this.ui.breakAndRun();
+    const need = m.need || Math.ceil(m.bestOf / 2);
+    if (m.wins[winner] >= need) { g.after(bnr ? 2.2 : 1.2, () => this.endMatch(winner, reason)); return; }
     g.audio.cWin();
-    g.after(0.9, () => {
+    g.after(bnr ? 2.0 : 0.9, () => {
       this.ui.frameResult(`${w.name} takes the frame`, reason, m.wins);
       m.breaker = 1 - m.breaker;
       g.after(3.4, () => { if (this.match === m) this.startFrame(); });
@@ -577,24 +628,43 @@ export class Classic {
     g.audio.cWin();
     const st = this.data.stats;
     const earn = (id) => { const a = g.meta.achieve(id); if (a) this.ui.achievement(a.name); };
+    let rec = null;
     if (m.type === 'ai') {
       st.played++;
+      const r = this.data.rivals[m.opp.id] = this.data.rivals[m.opp.id] || { w: 0, l: 0 };
       if (winner === 0) {
         st.won++; st.streak++; st.bestStreak = Math.max(st.bestStreak, st.streak);
         st.aiWins[m.level] = (st.aiWins[m.level] || 0) + 1;
+        r.w++;
         earn('classic_win');
         if (m.level === 'expert') earn('hustler');
-      } else st.streak = 0;
+      } else { st.streak = 0; r.l++; }
+      rec = r;
     } else { st.localMatches++; earn('classic_win'); }
+    const xp = m.type === 'ai' ? (winner === 0 ? 120 : 50) + m.ps[0].pots * 3 + ({ easy: 0, normal: 10, hard: 30, expert: 60 }[m.level] || 0) : 40 + (m.ps[0].pots + m.ps[1].pots) * 2;
+    const lv = this.addXP(xp);
     this.save();
     if (m.tourney) { this.tourneyResult(winner === 0, reason); return; }
-    this.ui.matchEnd({ title: `${w.name} wins`, reason, score: m.bestOf > 1 ? m.wins : null, players: m.players });
+    this.ui.matchEnd({ title: `${w.name} wins`, reason, score: m.need > 1 ? m.wins : null, players: m.players, stats: m.ps, rec, opp: m.opp, xp, lv, streak: m.type === 'ai' ? st.streak : null });
+  }
+
+  // CLASSIC LEVEL: looks only (rooms, cues, felts, ball sets)
+  addXP(n) {
+    const d = this.data, before = d.level;
+    d.xp += n;
+    while (d.xp >= CLEVEL_XP(d.level)) { d.xp -= CLEVEL_XP(d.level); d.level++; }
+    if (d.level > before) {
+      const all = [...BALLS, ...CUES, ...FELTS, ...ROOMS];
+      const got = all.filter(it => it.unlock?.clevel > before && it.unlock.clevel <= d.level);
+      this.pendingUnlocks = [...(this.pendingUnlocks || []), ...got];
+    }
+    return { from: before, to: d.level, xp: d.xp, need: CLEVEL_XP(d.level) };
   }
 
   // ============================================================ tournament
   // four players, two semi-finals, one final. The other semi is played out of sight.
   startTourney(cfg) {
-    const pool = shuffle([...REGULARS]).slice(0, 3);
+    const pool = shuffle([...OPPONENTS]).slice(0, 3).map(o => ({ name: o.name, style: o.style, opp: o.id }));
     const lv = cfg.level;
     const up = { easy: 'normal', normal: 'hard', hard: 'expert', expert: 'expert' }[lv];
     const field = [
@@ -610,7 +680,8 @@ export class Classic {
     const T = this.tourney, f = T.field;
     const oppIdx = T.round === 'semi' ? 1 : T.winners[1];
     const o = f[oppIdx];
-    this.startMatch({ type: 'ai', names: [f[0].name], level: o.level, style: o.style, oppName: o.name, bestOf: T.round === 'final' ? Math.max(3, T.cfg.bestOf) : T.cfg.bestOf, clock: T.cfg.clock, tourney: T });
+    const fmt = T.round === 'final' ? (T.cfg.format === 'single' ? 'bo3' : T.cfg.format) : T.cfg.format;
+    this.startMatch({ type: 'ai', names: [f[0].name], level: o.level, style: o.style, opp: o.opp, format: fmt, clock: T.cfg.clock, tourney: T });
   }
   tourneyResult(won, reason) {
     const T = this.tourney, g = this.g;
@@ -626,6 +697,7 @@ export class Classic {
       T.champion = won ? 0 : T.winners[1];
       if (won) {
         this.data.stats.tourneys = (this.data.stats.tourneys || 0) + 1;
+        this.addXP(300);
         const a = g.meta.achieve('tourney');
         if (a) this.ui.achievement(a.name);
       }
@@ -642,10 +714,12 @@ export class Classic {
     g.cue.visible = false;
     this.ui.thinking(true);
     this.ui.hint('');
-    const lv = LEVELS[m.level];
+    const lv = LEVELS[m.level], sty = STYLES[p.style] || STYLES.balanced;
+    const tempo = sty.tempo ?? 1;
     this.ai = {
       gen: plan({ physics: g.physics, group: p.group, isBreak: m.isBreak, inHand: m.inHand, kitchen: m.kitchen, level: m.level, style: p.style }),
-      t: 0, min: lv.think[0] + Math.random() * (lv.think[1] - lv.think[0]), result: null,
+      t: 0, min: (lv.think[0] + Math.random() * (lv.think[1] - lv.think[0])) * tempo, result: null, tempo,
+      strokes: m.isBreak ? 2 : Math.max(0, (sty.strokes ?? 2) - (m.level === 'easy' ? 1 : 0) + (Math.random() < 0.3 ? 1 : 0)),
     };
   }
 
@@ -682,18 +756,30 @@ export class Classic {
       let d = A.shot.angle - g.aimAngle;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
-      g.aimAngle += d * (1 - Math.exp(-dt * 5.5));
+      // a person lines up in two moves: a quick swing onto the ball, then small corrections
+      const rate = A.at < 0.35 / A.tempo ? 7 : 3.2;
+      g.aimAngle += d * (1 - Math.exp(-dt * rate));
+      if (A.at > 0.45 && Math.abs(d) < 0.02 && Math.random() < dt * 1.5 && !A.nudged) { A.nudged = true; g.aimAngle += (Math.random() - 0.5) * 0.012; }
       g.spin.x += (A.shot.side - g.spin.x) * Math.min(1, dt * 4);
       g.spin.y += (A.shot.top - g.spin.y) * Math.min(1, dt * 4);
       g.cue.visible = true;
       g.cue.place(cue.x, cue.z, g.aimAngle, 0.035 + Math.sin(g.time * 3) * 0.004, 0.09 + g.spin.y * 0.04);
-      if (A.at > 0.75 && Math.abs(d) < 0.0015) {
+      if (A.at > 0.75 * A.tempo && Math.abs(d) < 0.0015) {
         g.aimAngle = A.shot.angle;
-        g.state = 'aiCharge';
+        g.state = A.strokes > 0 ? 'aiStroke' : 'aiCharge';
+        A.st = 0;
         g.charge = 0;
         A.power = powerForSpeed(A.shot.speed, m.isBreak ? BREAK_SPEED : PHYS.maxShotSpeed);
       }
       g.camMode = 'aim';
+    } else if (g.state === 'aiStroke') {
+      // practice strokes: the cue slides back and forth before the real one
+      A.st += dt;
+      const per = 0.55 * Math.max(0.7, A.tempo);
+      const k = Math.sin((A.st / per) * Math.PI * 2);
+      g.cue.place(cue.x, cue.z, g.aimAngle, 0.03 + (k * 0.5 + 0.5) * (0.05 + A.power * 0.08), 0.09 + g.spin.y * 0.04);
+      if (A.st >= per * A.strokes) { g.state = 'aiCharge'; g.charge = 0; }
+      g.camMode = m.isBreak ? 'charge' : 'aim';
     } else if (g.state === 'aiCharge') {
       g.charge = Math.min(A.power, g.charge + dt * (0.8 + g.charge * 0.6));
       g.cue.place(cue.x, cue.z, g.aimAngle, 0.02 + g.charge * 0.24, 0.09 + g.spin.y * 0.04);
@@ -730,8 +816,44 @@ export class Classic {
     g.after(0.6, () => { if (this.match === m) this.beginTurn(); });
   }
 
+  // ---- practice challenges (drills.js)
+  startDrill(id) {
+    const g = this.g, m = this.match, D = DRILLS[id];
+    if (!D) { this.practiceRack('rack'); return; }
+    m.drill = { id, score: 0, tries: 0, next: 1 };
+    m.layout = 'drill';
+    m.inHand = true; m.kitchen = false; m.isBreak = false;
+    g.state = 'cwait';
+    D.setup(this, m.drill);
+    this.snapshot = null;
+    this.ui.updateHUD();
+    this.ui.drillCard(D, this.data.drills[id] || 0);
+    g.camMode = 'aim';
+    g.after(0.5, () => { if (this.match === m) this.beginTurn(); });
+  }
+
+  drillResolve(r) {
+    const g = this.g, m = this.match, d = m.drill, D = DRILLS[d.id];
+    d.tries++;
+    if (r.pots.includes(0)) this.respawnCue();
+    const res = D.read(this, d, r);
+    if (d.id === 'break') d.score = res.score;
+    this.ui.updateHUD();
+    if (res.over) {
+      const best = this.data.drills[d.id] || 0, isBest = d.score > best;
+      if (isBest) { this.data.drills[d.id] = d.score; this.save(); }
+      g.state = 'cwait';
+      g.after(0.5, () => { if (this.match === m) this.ui.drillResult(D, d, Math.max(best, d.score), isBest, res.say); });
+      return;
+    }
+    this.ui.notice(res.say, D.tries ? `${d.score} ${D.unit} · ${D.tries - d.tries} to go` : `${d.score} ${D.unit}`, res.ok ? 'soft good' : 'soft');
+    g.state = 'cwait';
+    if (!res.hold) g.after(0.45, () => { if (this.match === m) this.beginTurn(); });
+  }
+
   practiceResolve(r) {
     const g = this.g, m = this.match;
+    if (m.drill) { this.drillResolve(r); return; }
     const own = r.potBalls.filter(b => b.kind !== 'cue');
     const st = this.data.stats;
     st.potted += own.length;
@@ -773,6 +895,7 @@ export class Classic {
   // ============================================================ loop + keys
   update(dt, simDt) {
     const g = this.g;
+    if (this.match && !this.paused && this.match.type !== 'practice' && !['cend', 'cmenu'].includes(g.state)) this.data.stats.playtime = (this.data.stats.playtime || 0) + dt;
     this.lounge.update(dt, g.camera, ['lounge', 'showcase', 'intro', 'end'].includes(g.camMode));
     if (this.ai) this.updateAI(dt);
     this.tickClock(dt);
@@ -812,7 +935,9 @@ export class Classic {
       if (code === 'KeyR') { g.spin.x = 0; g.spin.y = 0; }
       if (code === 'KeyQ') { if (g.camStyle === 'top') g.topZoom = Math.min(1.6, (g.topZoom || 1) + 0.1); else g.camDist = Math.max(1.3, g.camDist - 0.25); }
       if (code === 'KeyE') { if (g.camStyle === 'top') g.topZoom = Math.max(0.85, (g.topZoom || 1) - 0.1); else g.camDist = Math.min(3.4, g.camDist + 0.25); }
-      if (m?.type === 'practice') {
+      if (m?.type === 'practice' && m.drill) {
+        if (code === 'KeyN') { g.audio.cUi('select'); this.startDrill(m.drill.id); }
+      } else if (m?.type === 'practice') {
         if (code === 'KeyN') { g.audio.cUi('select'); this.practiceRack(m.layout); }
         if (code === 'KeyU') this.practiceUndo();
         if (code === 'KeyM') this.practiceMove();
@@ -822,12 +947,15 @@ export class Classic {
     if ((code === 'KeyC' || code === 'Tab') && m) this.toggleCamera();
   }
 
+  // C: 3D → top down → cue view
   toggleCamera() {
     const g = this.g;
-    g.camStyle = g.camStyle === 'top' ? 'cinematic' : 'top';
-    this.s.camera = g.camStyle === 'top' ? 'top' : '3d';
+    const order = ['3d', 'top', 'cue'];
+    const next = order[(order.indexOf(this.s.camera) + 1) % order.length];
+    this.s.camera = next;
+    g.camStyle = next === 'top' ? 'top' : next === 'cue' ? 'cue' : 'cinematic';
     this.save();
-    this.ui.notice(g.camStyle === 'top' ? 'Top down' : '3D view', '', 'soft');
+    this.ui.notice({ '3d': '3D view', top: 'Top down', cue: 'Cue view' }[next], '', 'soft');
     g.audio.cUi('move');
   }
 

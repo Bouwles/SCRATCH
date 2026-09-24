@@ -17,7 +17,7 @@ import { Cue, AimGuide } from '../world/Cue.js';
 import { FX } from '../world/FX.js';
 import { AudioEngine } from '../audio/Audio.js';
 import { Meta } from './meta.js';
-import { themeById, ballSkinById, cueSkinById } from './cosmetics.js';
+import { themeById, ballSkinById, cueSkinById, feltById, trailById, pocketFxById } from './cosmetics.js';
 import { UI } from '../ui/UI.js';
 import { ShotMixin } from './shot.js';
 import { RunMixin, makeHoming, makeOrbit } from './run.js';
@@ -117,6 +117,7 @@ export class Game {
     R.configure({ mode: modern ? 'modern' : 'ps1', ps1Height, resScale: s.resScale });
     this.setGraphicsStyle(modern);
     this.fx.density = { low: 0.35, med: 0.65, high: 1 }[s.particles] ?? 1;
+    this.trailKind = s.trails === false ? 'off' : trailById(this.activeLoadout().trail).id;
     this.camStyle = s.camera === 'top' ? 'top' : 'cinematic';
     this.audio.vol.master = s.master ?? 0.8; this.audio.vol.music = s.music; this.audio.vol.sfx = s.sfx;
     this.audio.applyVolumes();
@@ -167,12 +168,38 @@ export class Game {
     shared.uHasCube.value = 1;
   }
 
+  // the loadout in use: the roguelite's, or RAJIS's own once it exists
+  activeLoadout(mode = null) {
+    const d = this.meta.data, sel = d.selected;
+    const rajis = mode ? mode === 'rajis' : this.run?.mode === 'rajis' || (!this.run && this.ui?.rajis);
+    if (!rajis) return sel;
+    const L = d.loadouts?.rajis;
+    const own = (kind, id) => this.meta.isUnlocked({ ...{ ball: ballSkinById, cue: cueSkinById, trail: trailById, pocket: pocketFxById }[kind](id), kind });
+    return { ball: 'classic', cue: 'wood', felt: 'theme', trail: own('trail', 'radar') ? 'radar' : 'light', pocket: own('pocket', 'lockon') ? 'lockon' : 'classic', ...(L || {}) };
+  }
+
   applyCosmetics(themeOverride) {
-    const sel = this.meta.data.selected;
-    const theme = themeOverride || themeById(sel.theme);
-    this.setTheme(theme);
-    this.ballView.setSkin(ballSkinById(sel.ball));
-    this.cue.setSkin(cueSkinById(sel.cue));
+    const L = this.activeLoadout();
+    const base = themeOverride || themeById(this.meta.data.selected.theme);
+    this.setTheme(this.withFelt(base, L.felt));
+    this.ballView.setSkin(ballSkinById(L.ball));
+    this.cue.setSkin(cueSkinById(L.cue));
+    this.trailKind = this.meta.s.trails === false ? 'off' : trailById(L.trail).id;
+    this.pocketKind = pocketFxById(L.pocket).id;
+  }
+
+  // a room keeps its own cloth unless the loadout brings one (cached, so the table is not rebuilt for nothing)
+  withFelt(theme, feltId) {
+    const f = feltById(feltId);
+    if (!f.felt) return theme;
+    this.feltCache = this.feltCache || new Map();
+    const key = `${theme.id}|${f.id}|${theme.loc || ''}`;
+    let t = this.feltCache.get(key);
+    if (!t || t.base !== theme) {
+      t = { ...theme, base: theme, felt: f.felt, cushion: f.cushion, felt2: f.felt, feltFx: f.fx || null, feltLine: f.line || null };
+      this.feltCache.set(key, t);
+    }
+    return t;
   }
 
   setTheme(theme) {
@@ -246,8 +273,15 @@ export class Game {
         this.userCam = true;
         return;
       }
-      if (this.state === 'aim') {
-        if (this.keys.ShiftLeft || this.keys.ShiftRight) this.aimAngle += dx * 0.0009 * (this.renderer.mirror ? -1 : 1);
+      // aiming keeps working while you power up. When the camera rides behind
+      // the cue (the charge close-up, Classic's cue view) the mouse turns the aim
+      // instead of pointing at the felt, so the view can't chase the cursor round.
+      if (this.state === 'aim' || this.state === 'charge') {
+        if (this.mode === 'classic' && !this.classic.isHumanTurn()) return;
+        const mir = this.renderer.mirror ? -1 : 1;
+        const fine = this.keys.ShiftLeft || this.keys.ShiftRight;
+        if (fine) this.aimAngle += dx * 0.0009 * mir;
+        else if (this.aimFollowsCamera()) this.aimAngle += dx * 0.0024 * mir;
         else this.pointAim();
         this.tutorialAim = (this.tutorialAim || 0) + Math.abs(dx) + Math.abs(dy);
       }
@@ -343,6 +377,13 @@ export class Game {
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -R);
     const hit = new THREE.Vector3();
     return ray.intersectPlane(plane, hit) ? hit : null;
+  }
+
+  // is the camera tied to the aim direction right now? (then pointing at the felt would feed back into itself)
+  aimFollowsCamera() {
+    if (this.camStyle === 'top') return false;
+    if (this.camStyle === 'cue') return true;
+    return this.camMode === 'charge';
   }
 
   pointAim() {
@@ -517,6 +558,11 @@ export class Game {
       const pan = (zoom - 1) * 0.9;
       const fx = cue && mode !== 'watch' ? cue.x : 0, fz = cue && mode !== 'watch' ? cue.z : 0;
       target.set(fx * pan, 0, fz * pan);
+    } else if (this.camStyle === 'cue' && (mode === 'aim' || mode === 'charge') && cue) {
+      // CUE VIEW (Classic): down the line of the shot, low over the cloth
+      const a = this.aimAngle;
+      target.set(cue.x + Math.cos(a) * 0.45, 0, cue.z + Math.sin(a) * 0.45);
+      yaw = a + Math.PI; pitch = 0.2 + (mode === 'charge' ? this.charge * 0.03 : 0); dist = 1.05; rate = 4.5; fov = 46;
     } else if (mode === 'aim' || mode === 'place') {
       const cx = cue ? cue.x : 0, cz = cue ? cue.z : 0;
       target.set(cx * 0.4, 0, cz * 0.35);
@@ -528,6 +574,17 @@ export class Game {
       target.set(cue.x + d.x * 0.32, 0, cue.z + d.z * 0.32);
       yaw = a + Math.PI; pitch = 0.3 + this.charge * 0.05; dist = 0.95 - this.charge * 0.08;
       rate = 5.5; fov = 50 - this.charge * 6;
+    } else if (mode === 'watch' && this.mode === 'classic' && this.classic.s.follow && cue && cue.state === 'table' && this.camStyle !== 'top') {
+      // FOLLOW SHOT (Classic option): ride along behind the cue ball
+      this.watchFocus = this.watchFocus || new THREE.Vector3();
+      this.watchFocus.x = damp(this.watchFocus.x, cue.x, 3, dt);
+      this.watchFocus.z = damp(this.watchFocus.z, cue.z, 3, dt);
+      target.set(this.watchFocus.x, 0, this.watchFocus.z);
+      yaw = this.shotYaw ?? this.camYaw; pitch = 0.62; dist = 1.35; rate = 2.4;
+    } else if (mode === 'intro' && this.mode === 'classic') {
+      // a slow glide across the table while the players are announced
+      const k = this.introT = (this.introT || 0) + dt;
+      yaw = Math.PI * 0.72 + k * 0.22; pitch = 0.3 + k * 0.05; dist = 2.2 + k * 0.12; target.set(0.35 - k * 0.12, 0, 0); rate = 1.6; fov = 42;
     } else if (mode === 'watch') {
       // follow the action loosely
       let sx = 0, sz = 0, n = 0;
@@ -595,10 +652,8 @@ export class Game {
       if (this.keys.KeyD) this.spin.x = Math.min(1, this.spin.x + sp);
       const l = Math.hypot(this.spin.x, this.spin.y);
       if (l > 1) { this.spin.x /= l; this.spin.y /= l; }
-      if (this.state === 'aim') {
-        if (this.keys.ArrowLeft) this.aimAngle -= dt * (this.keys.ShiftLeft ? 0.05 : 0.35);
-        if (this.keys.ArrowRight) this.aimAngle += dt * (this.keys.ShiftLeft ? 0.05 : 0.35);
-      }
+      if (this.keys.ArrowLeft) this.aimAngle -= dt * (this.keys.ShiftLeft ? 0.05 : 0.35);
+      if (this.keys.ArrowRight) this.aimAngle += dt * (this.keys.ShiftLeft ? 0.05 : 0.35);
     }
     if (this.state === 'aim' || this.state === 'charge') {
       if (!cue || cue.state !== 'table') return;

@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 2.0.0 AFTERHOURS" src="https://img.shields.io/badge/version-2.0.0%20AFTERHOURS-ff2bd6">
+  <img alt="version 2.1.0 AFTERHOURS" src="https://img.shields.io/badge/version-2.1.0%20AFTERHOURS-ff2bd6">
   <img alt="runs in the browser" src="https://img.shields.io/badge/runs%20in-the%20browser-2bf0ff">
   <img alt="three.js" src="https://img.shields.io/badge/three.js-r186-111111?logo=three.js&logoColor=white">
   <img alt="WebGL 2" src="https://img.shields.io/badge/WebGL-2-990000?logo=webgl&logoColor=white">
@@ -56,7 +56,7 @@ its own code as you play. The project contains no image, audio or model files.
 **In your browser:** go to **[bouwles.github.io/SCRATCH](https://bouwles.github.io/SCRATCH/)** and
 click **PLAY**. There's nothing to install.
 
-**From a release.** Download `SCRATCH-web-v2.0.0.zip` from the
+**From a release.** Download `SCRATCH-web-v2.1.0.zip` from the
 [latest release](https://github.com/Bouwles/SCRATCH/releases/latest) and unzip it.
 Serve the folder with any static server, then open `http://localhost:8000`:
 
@@ -80,7 +80,7 @@ npm run dev        # http://localhost:5173
 | --- | --- |
 | `npm run dev` | Development server with hot reload. Add `?debug` to the URL for the test hooks. |
 | `npm run build` | Production build in `dist/`, with relative paths throughout |
-| `npm run release` | Builds and checks the release, then packs `release/itch/SCRATCH-web-v2.0.0.zip` |
+| `npm run release` | Builds and checks the release, then packs `release/itch/SCRATCH-web-v2.1.0.zip` |
 | `npm run site` | Builds the GitHub Pages site in `_site/`: the landing page, with the game in `play/` |
 | `npm run test:physics` | Runs the physics edge-case suite in Node (breaks, jaws, frozen balls, obstacles, 300 random layouts) |
 | `npm run check:tricks` | Plays every Trick Table with the real physics to prove each one can be solved |
@@ -105,6 +105,27 @@ It needs a current Chrome, Edge, Firefox or Safari with WebGL 2, and a mouse.
   <img src="release/itch/gifs/switch.gif" alt="Switching to SCRATCH Classic: the tape drags, the CRT shuts off, the lounge fades in" width="480"><br>
   <sub>Switching to SCRATCH Classic: the tape drags, the CRT clicks off, and a quiet lounge fades in.</sub>
 </p>
+
+## New in 2.1
+
+- **You always know what a table wants.**
+  - A large bar at the bottom of the screen shows the objective in plain words
+    ("POT 3 BANK SHOTS"), your progress ("1 / 3 COMPLETE") and your shots left.
+  - Every table opens with its objective.
+  - Every shot is explained just above the bar ("STRAIGHT POT · NO CUSHION · DOES
+    NOT COUNT").
+  - Every table ends with a reason.
+- **SCRATCH Classic is a complete game of pool:**
+  - ten regulars with portraits, five playing styles and a record against you;
+  - Quick and Custom matches, best-of and race-to formats;
+  - shot recognition, Break & Run, and six practice challenges;
+  - a Tournament Hall, a cue-view camera and a Classic level.
+- **Every cosmetic has been rebuilt** around one rule: you can always tell the cue
+  ball, the 8, solids and stripes apart.
+  - 15 ball sets, 9 of them animated in the shader.
+  - 20 cues.
+  - Felts, shot trails and pocket effects as their own slots.
+  - A new Loadout screen with a live preview.
 
 ## New in AFTERHOURS
 
@@ -261,8 +282,10 @@ heart (until your first win), and short tips explain each new thing once.
   - **Style** (C to S+) multiplies your score.
   - **Heat** (0 to V) makes tables harder and rewards better while you dominate.
 - **Progression:**
-  - 55 achievements, 7 of them secret.
-  - 16 ball sets, 13 cues and 6 club themes.
+  - 56 achievements, 7 of them secret.
+  - 15 ball sets (9 animated), 20 cues, 11 felts, 5 shot trails, 7 pocket
+    effects and 6 club themes.
+  - Every set keeps the cue ball white, the 8 dark and the stripes striped.
   - A Collection that shows undiscovered things as `???`, with Synergies,
     Records and Run History pages.
 
@@ -273,23 +296,41 @@ The tape drags, the CRT clicks off, one clean *clack* sounds in the dark, and
 you're in a quiet late-night lounge with a jazz trio playing. **RETURN TO
 ROGUELITE** glitches you back, and a run in progress is waiting for you.
 
-- **VS AI** at Easy, Normal, Hard or Expert. The AI plans on a private copy of
-  the same physics and plays the real table with human-like error in aim, pace
-  and spin. It never moves balls or bends the physics. Over 16-frame matches,
-  each level beat the one below it 12–4 or better.
-- **AI styles:** Balanced, Cautious, Aggressive, Positional or Trickster, chosen
-  separately from difficulty.
-- **Tournament:** a four-player bracket against three regulars.
-- **Local Versus** for two players on one mouse (names, best of 1, 3, 5 or 7).
-  **Practice** has drills, undo and free cue-ball placement.
-- **Standard 8-ball rules**, with an optional **shot clock**. Every foul says
-  why, and ball in hand follows.
+- **Quick Match:** pick Easy, Normal, Hard or Expert and play the next
+  regular.
+- **Custom Match:** choose the opponent, difficulty, style, format (single frame,
+  best of 3 or 5, race to 3 or 5), aim guide, shot clock, table, room and cue.
+- **Ten regulars** with portraits and a style: Safe, Aggressive, Positional,
+  Trickster or Pressure. Difficulty is how well they play; style is how they
+  think.
+- **The AI** plans on a private copy of the same physics and plays the real table
+  with human-like error in aim, pace and spin. It lines up, takes practice
+  strokes and plays safe when it should. It never moves balls or bends the
+  physics.
+- **Shot recognition:** bank, double bank, combination, carom, long pot, break
+  pot, good position and good safety.
+- **Break & Run** is recognised and rewarded.
+- **Tournament:** a four-player bracket against three regulars, for a trophy.
+- **Local Versus** for two players on one mouse.
+- **Practice:** free practice with drills and undo, plus six challenges with
+  best scores:
+  - Break (spread, pots and scratch, with an instant rerack);
+  - Bank;
+  - Long Pot;
+  - Positioning;
+  - Clearance;
+  - Safety.
+- **Standard 8-ball rules**, with an optional **shot clock** (30, 45 or 60
+  seconds). Every foul says why, and ball in hand follows.
 - **Its own look, sound and settings:**
-  - always modern rendering;
-  - three rooms (the Lounge, the Parlour and the Loft), eight felts, six cues,
-    ball sets and lighting;
-  - its own statistics;
-  - press R on the result screen for a rematch.
+  - four rooms (Midnight Lounge, Private Club, Penthouse and Tournament Hall),
+    each with its own ambience;
+  - 3D, top-down and cue-view cameras, with an optional follow camera;
+  - classic cosmetics only, unless you choose **All compatible**.
+- **Match end** shows stats for both players, your record against that opponent
+  and a one-key rematch (R).
+- **Records:** win rate, streaks, Expert wins, tournaments and playtime.
+- **Classic level** unlocks rooms, felts and cues, never gameplay.
 
 ## Controls
 
@@ -304,7 +345,7 @@ ROGUELITE** glitches you back, and a run in progress is waiting for you.
 | W A S D, or drag the dot on the ball | Spin |
 | R | Reset spin |
 | Q / E | Zoom |
-| C or Tab | Cinematic 3D / top-down camera |
+| C or Tab | Cinematic 3D / top-down camera (Classic adds a cue view) |
 | Hold Space | Fast-forward while balls roll |
 | 1 2 3 | Use an item |
 | B | Take the Bookie's side bet |

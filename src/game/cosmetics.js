@@ -1,7 +1,6 @@
 // Table themes, ball skins and cue skins. All cosmetic: they swap textures,
 // shader parameters, lights and props on the same geometry.
 
-import { ballColor } from '../config.js';
 import { rng } from '../render/textures.js';
 
 // ---------------------------------------------------------------------------
@@ -98,7 +97,7 @@ export const THEMES = [
     grade: { lift: [0.01, 0.0, 0.03], gain: [1.0, 0.96, 1.02], sat: 0.95 },
   },
   {
-    id: 'command', name: 'COMMAND', desc: 'Radar screens, warning lights and a map table that is also a pool table.',
+    id: 'command', name: 'RADAR TABLE', desc: 'Radar screens, warning lights and a map table that is also a pool table.',
     unlock: { ach: 'system_online' }, rajis: true,
     felt: '#34401e', cushion: '#262f14', wood: ['#23261c', '#08090a'], metal: '#8fd14f',
     carpet: ['#0a0c08', '#1a2210', '#2a3418', '#3a2a0a'], seed: 131,
@@ -115,229 +114,121 @@ export const THEMES = [
 ];
 
 // ---------------------------------------------------------------------------
-// BALL SKINS
-const solid = (n) => ballColor(n);
-const neonCols = ['#fff', '#ffe23b', '#2b9bff', '#ff2b4a', '#b03bff', '#ff8a1b', '#2bff7a', '#ff2bd6', '#111'];
+// BALL SETS — one list for both games (see render/ballpaint.js for the
+// readability rules every set obeys). fx animates the coloured areas in the
+// shader; classy sets are the ones SCRATCH Classic offers by default.
+export const BALL_FX = { none: 0, galaxy: 1, neon: 2, plasma: 3, lava: 4, digital: 5, hologram: 6, radar: 7, liquid: 8, void: 9, cyber: 10, afterhours: 11 };
+const F = BALL_FX;
 
 export const BALL_SKINS = [
-  { id: 'classic', name: 'CLASSIC', desc: 'Phenolic resin. Timeless.', unlock: { level: 1 }, tex: {}, mat: {} },
   {
-    id: 'neon', name: 'NEON', desc: 'Glow-in-the-dark club set.', unlock: { level: 2 },
-    tex: { color: n => n === 8 ? '#141018' : neonCols[((n - 1) % 7) + 1], white: '#1a1024', numBg: '#1a1024', numFg: '#ffffff', cue: '#e8fbff', cueDot: '#2bf0ff' },
-    mat: { emissiveAmt: 0.9, rim: 0xff2bd6, rimAmt: 0.8, reflect: 0.15 }, trail: '#ff2bd6',
+    id: 'classic', name: 'CLASSIC', desc: 'Phenolic resin, the colours everybody knows.', unlock: { level: 1 }, classy: true,
+    pal: {}, cueMark: 'dot', mat: {},
   },
   {
-    id: 'marble', name: 'MARBLE', desc: 'Cold, heavy, expensive-looking stone.', unlock: { level: 5 },
-    tex: {
-      pattern: (x, W, H, n, col) => {
-        const r = rng(n * 7 + 1);
-        x.globalAlpha = 0.45;
-        for (let i = 0; i < 14; i++) {
-          x.strokeStyle = r() > 0.5 ? '#ffffff' : '#000000';
-          x.lineWidth = 1;
-          x.beginPath();
-          let px = r() * W, py = r() * H;
-          x.moveTo(px, py);
-          for (let k = 0; k < 8; k++) { px += (r() - 0.3) * 14; py += (r() - 0.5) * 8; x.lineTo(px, py); }
-          x.stroke();
-        }
-        x.globalAlpha = 1;
-      },
+    id: 'tournament', name: 'TOURNAMENT', desc: 'Brighter pro colours and the spotted cue ball from the TV tables.', unlock: { level: 2 }, classy: true, buy: true,
+    pal: { cue: '#fbfbf6', stripe: '#fbfbf6', disc: '#fbfbf6', mark: '#c8202a', hues: ['#ffc300', '#0f50e0', '#e6151f', '#5a2ea6', '#ff6a00', '#0a8a4a', '#8e1418'], eight: '#08080a' },
+    cueMark: 'measle', mat: { spec: 1.2 },
+  },
+  {
+    id: 'vintage', name: 'VINTAGE', desc: 'Earthy colours, softly yellowed. A set that has seen some rooms.', unlock: { level: 5 }, classy: true, buy: true,
+    pal: { cue: '#ebdfc4', stripe: '#ebdfc4', disc: '#ebdfc4', mark: '#8a3a2a', hues: ['#d6a238', '#2c4a88', '#b23a31', '#5a3a6d', '#cd7036', '#2f6a4a', '#6c2a25'], eight: '#161412' },
+    cueMark: 'dot', mat: { spec: 0.8, reflect: 0.14 },
+  },
+  {
+    id: 'ivory', name: 'IVORY', desc: 'Warm cream and deep, rich colours. For running a whole rack from the break.', unlock: { ach: 'break_run' }, classy: true,
+    pal: { cue: '#f5ecd4', stripe: '#f0e4c6', disc: '#f5ecd4', mark: '#b8923a', ink: '#1a140c', hues: ['#e2a82c', '#23478f', '#b3302a', '#5e3480', '#d0661f', '#1f6e45', '#6e2320'], eight: '#0e0b08' },
+    cueMark: 'ring', discRing: '#b8923a', mat: { spec: 1.3, reflect: 0.3 },
+  },
+  {
+    id: 'neon', name: 'NEON', desc: 'Club colours that glow a little in the dark. The white stays white.', unlock: { level: 3 }, buy: true, animated: true,
+    pal: { cue: '#f4fbff', mark: '#2bf0ff', hues: ['#ffe23b', '#2b9bff', '#ff2b4a', '#b03bff', '#ff8a1b', '#2bff7a', '#ff2bd6'], eight: '#0c0a14' },
+    cueMark: 'ring', fx: F.neon, mat: { rim: 0xff2bd6, rimAmt: 0.45, reflect: 0.18 }, trail: '#ff2bd6',
+  },
+  {
+    id: 'chrome', name: 'CHROME', desc: 'Coloured metal, polished to a mirror.', unlock: { ach: 'boss_slayer' },
+    pal: { cue: '#f0f2f8', stripe: '#e8ecf4', disc: '#f4f6fa', mark: '#5a6070', hues: ['#e8c24a', '#4a78d8', '#d84a4a', '#8a5ad8', '#e8884a', '#4ab87a', '#a84848'], eight: '#26262e' },
+    cueMark: 'ring', mat: { reflect: 0.85, spec: 2.0, rimAmt: 0.25, bands: 5 },
+  },
+  {
+    id: 'gold', name: 'GOLD LEAF', desc: 'Jewel colours with gold trim. Terribly impractical, entirely readable.', unlock: { ach: 'gold_rush' },
+    pal: { cue: '#fbf5e6', stripe: '#fbf3e2', disc: '#fff8e8', mark: '#c89a2a', ink: '#2a1a00', hues: ['#f0c030', '#1e4fb8', '#c81e2a', '#5a2a9a', '#e0701a', '#128a48', '#7a1418'], eight: '#141008' },
+    cueMark: 'ring', discRing: '#d8a83a',
+    decor: (x, W, H, num, hue, stripe) => { if (stripe) { x.fillStyle = '#d8a83a'; x.fillRect(0, H * 0.27 - 1, W, 1.2); x.fillRect(0, H * 0.73, W, 1.2); } },
+    mat: { reflect: 0.45, spec: 1.6, rim: 0xffd040, rimAmt: 0.35 }, trail: '#ffd040',
+  },
+  {
+    id: 'galaxy', name: 'GALAXY', desc: 'Each ball holds a slowly drifting nebula. The cue ball holds a few stars.', unlock: { level: 11 }, animated: true,
+    pal: { cue: '#f2f2ff', mark: '#8a9cff', hues: ['#f0c040', '#3a6aff', '#ff3a5a', '#a040ff', '#ff8a2a', '#30d890', '#e04aa0'], eight: '#05030c' },
+    cueMark: 'core', fx: F.galaxy, mat: { rim: 0x8060ff, rimAmt: 0.45, reflect: 0.25 }, trail: '#8060ff',
+  },
+  {
+    id: 'plasma', name: 'PLASMA', desc: 'Energy moving under the surface. For running a table at HEAT V.', unlock: { ach: 'too_hot' }, animated: true,
+    pal: { cue: '#fbf8ff', mark: '#ff6af0', hues: ['#ffd23a', '#3aa0ff', '#ff3a4a', '#c05aff', '#ff8030', '#40ff90', '#ff4ab0'], eight: '#0a0610' },
+    cueMark: 'core', fx: F.plasma, mat: { rim: 0xff60ff, rimAmt: 0.4, reflect: 0.2 }, trail: '#ff60ff',
+  },
+  {
+    id: 'lava', name: 'LAVA', desc: 'Cooled rock with slow cracks of heat. The cue ball is white ash.', unlock: { level: 14 }, animated: true,
+    pal: { cue: '#efe8e0', mark: '#e0702a', hues: ['#ffb020', '#2a60c0', '#e03020', '#7a3aa0', '#ff6a10', '#2a9a50', '#a02010'], eight: '#0a0604' },
+    cueMark: 'dot', fx: F.lava, mat: { reflect: 0.12, spec: 0.9, rim: 0xff4010, rimAmt: 0.3 }, trail: '#ff5010',
+  },
+  {
+    id: 'digital', name: 'DIGITAL', desc: 'A pixel grid that never stops scrolling. Rendered on a machine with 2KB of RAM.', unlock: { level: 8 }, animated: true,
+    pal: { cue: '#f0fff8', mark: '#30c8a0', hues: ['#fff030', '#30a0ff', '#ff3040', '#b040ff', '#ff9020', '#30ff70', '#ff40c0'], eight: '#080c08' },
+    cueMark: 'grid', fx: F.digital, mat: { reflect: 0.1, spec: 0.8, bands: 3 }, trail: '#30ff70',
+  },
+  {
+    id: 'hologram', name: 'HOLOGRAM', desc: 'Scanlines and a sheen that slides over it. For a table without a single miss.', unlock: { ach: 'perfect' }, animated: true,
+    pal: { cue: '#f4fcff', mark: '#5adcff', hues: ['#ffe86a', '#5ab8ff', '#ff6a8a', '#c08aff', '#ffaa5a', '#6affb0', '#ff7ad0'], eight: '#101828' },
+    cueMark: 'ring', fx: F.hologram, mat: { rim: 0x60e0ff, rimAmt: 0.6, reflect: 0.3 }, trail: '#60e0ff',
+  },
+  {
+    id: 'liquid', name: 'LIQUID', desc: 'A surface that never quite settles. For finding five hidden synergies.', unlock: { ach: 'synergist' }, animated: true,
+    pal: { cue: '#f4f6fa', mark: '#8aa0b8', hues: ['#f8d060', '#5a90e8', '#e85a6a', '#a070e0', '#f0a060', '#60d0a0', '#c0506a'], eight: '#1a1a22' },
+    cueMark: 'ring', fx: F.liquid, mat: { reflect: 0.75, spec: 1.8, rimAmt: 0.3 }, trail: '#a0c0e8',
+  },
+  {
+    id: 'void', name: 'VOID', desc: 'Colour falling slowly inward. For three balls in one shot.', unlock: { ach: 'how' }, animated: true,
+    pal: { cue: '#f2f0ff', mark: '#9a60ff', hues: ['#ffd040', '#4070ff', '#ff4060', '#b050ff', '#ff8a30', '#40e090', '#ff50c0'], eight: '#000000' },
+    cueMark: 'ring', fx: F.void, mat: { rim: 0x9a4bff, rimAmt: 0.75, reflect: 0.15 }, trail: '#9a4bff',
+  },
+  {
+    id: 'afterhours', name: 'AFTERHOURS', desc: 'Late-night colours, and a lamp passing somewhere. For beating The Owner.', unlock: { ach: 'last_game' }, animated: true,
+    pal: { cue: '#f0e8d8', mark: '#6a5cff', hues: ['#d8b050', '#3a5a9a', '#b8404a', '#6a4a8a', '#c87840', '#3a8a6a', '#8a3a4a'], eight: '#0e0c14' },
+    cueMark: 'dot', fx: F.afterhours, mat: { reflect: 0.22, spec: 1.1, rim: 0x6a5cff, rimAmt: 0.3 }, trail: '#6a5cff',
+  },
+  // ---- these stay out of every list until their mode is found
+  {
+    id: 'cyber', name: 'CYBER', desc: 'Brushed steel with circuits that light up. Taken from the machine.', unlock: { ach: 'machine_learning' }, rajis: true, animated: true,
+    pal: { cue: '#e8ecf2', mark: '#2bf0ff', hues: ['#ffd040', '#40a0ff', '#ff4050', '#c060ff', '#ff9030', '#40ff90', '#ff50c0'], eight: '#1a1c20' },
+    cueMark: 'eye', fx: F.cyber, mat: { reflect: 0.55, spec: 1.7, rim: 0x2bf0ff, rimAmt: 0.3, bands: 5 }, trail: '#2bf0ff',
+  },
+  {
+    id: 'armored', name: 'ARMORED', desc: 'Riveted plates in every colour. Heavy industry.', unlock: { ach: 'heavy_industry' }, rajis: true,
+    pal: { cue: '#e8e4d8', mark: '#f5c542', hues: ['#d8b040', '#3a6ab0', '#c03a30', '#6a4a90', '#d07a30', '#3a8a4a', '#8a3028'], eight: '#1a1a16' },
+    cueMark: 'ring',
+    decor: (x, W, H, num, hue, stripe) => {
+      x.fillStyle = 'rgba(0,0,0,0.35)';
+      const y0 = stripe ? H * 0.27 : 0, y1 = stripe ? H * 0.73 : H;
+      for (let u = 0; u < W; u += 16) x.fillRect(u, y0, 1, y1 - y0);
+      x.fillStyle = 'rgba(255,255,255,0.4)';
+      for (let u = 4; u < W; u += 16) { x.fillRect(u, y0 + 3, 1.4, 1.4); x.fillRect(u, y1 - 5, 1.4, 1.4); }
     },
-    mat: { reflect: 0.4, spec: 1.3, rimAmt: 0.2 },
+    mat: { reflect: 0.3, spec: 1.2, bands: 3 }, trail: '#f5c542',
   },
   {
-    id: '8bit', name: '8-BIT', desc: 'Rendered on a machine with 2KB of RAM.', unlock: { level: 8 },
-    tex: {
-      post: (x, W, H) => {
-        const d = x.getImageData(0, 0, W, H);
-        for (let y = 0; y < H; y += 8) for (let xx = 0; xx < W; xx += 8) {
-          const i = (y * W + xx) * 4;
-          const r = d.data[i], g = d.data[i + 1], b = d.data[i + 2];
-          x.fillStyle = `rgb(${r & 0xc0 | 0x20},${g & 0xc0 | 0x20},${b & 0xc0 | 0x20})`;
-          x.fillRect(xx, y, 8, 8);
-        }
-      },
-    },
-    mat: { bands: 2, reflect: 0, spec: 0.6, rimAmt: 0 },
-  },
-  {
-    id: 'galaxy', name: 'GALAXY', desc: 'Each ball contains a small, doomed universe.', unlock: { level: 11 },
-    tex: {
-      color: n => n === 0 ? '#e8e8ff' : n === 8 ? '#05030c' : ['#1a0840', '#081a4a', '#3a0830', '#08302a', '#2a1a50', '#401010', '#102a40'][(n - 1) % 7],
-      white: '#0a0620', numBg: '#e0d8ff', numFg: '#1a0840',
-      pattern: (x, W, H, n) => {
-        const r = rng(n * 31 + 5);
-        for (let i = 0; i < 12; i++) {
-          const g = x.createRadialGradient(r() * W, r() * H, 0, r() * W, r() * H, 18);
-          g.addColorStop(0, r() > 0.5 ? 'rgba(255,60,200,0.35)' : 'rgba(60,160,255,0.35)');
-          g.addColorStop(1, 'rgba(0,0,0,0)');
-          x.fillStyle = g; x.fillRect(0, 0, W, H);
-        }
-      },
-    },
-    mat: { fx: 1, rim: 0x8060ff, rimAmt: 0.7, reflect: 0.25, emissiveAmt: 0.35 }, trail: '#8060ff',
-  },
-  {
-    id: 'toxic', name: 'TOXIC', desc: 'Do not lick. Do not pot the green one.', unlock: { level: 14 },
-    tex: {
-      color: n => n === 0 ? '#e8ffd0' : n === 8 ? '#0a1a04' : ['#8aff00', '#d4ff00', '#30ff60', '#a0ff40', '#60d000', '#f0ff60', '#00ff90'][(n - 1) % 7],
-      white: '#1a2a08', numBg: '#101a04', numFg: '#b0ff30',
-      pattern: (x, W, H, n) => {
-        const r = rng(n * 13 + 2);
-        for (let i = 0; i < 20; i++) { x.fillStyle = 'rgba(10,40,0,0.5)'; x.beginPath(); x.arc(r() * W, r() * H, 1 + r() * 3, 0, 7); x.fill(); }
-      },
-    },
-    mat: { fx: 2, rim: 0x80ff20, rimAmt: 0.9, emissiveAmt: 0.55, reflect: 0.1 }, trail: '#80ff20',
-  },
-  {
-    id: 'orbs', name: 'ENERGY ORBS', desc: 'Collect all seven. Something might happen.', unlock: { level: 16 },
-    tex: {
-      color: n => n === 0 ? '#fff8e0' : n === 8 ? '#301000' : '#ff9a10',
-      white: '#ffb830', numbers: false,
-      pattern: (x, W, H, n) => {
-        if (n === 0) return;
-        const stars = n === 8 ? 8 : ((n - 1) % 7) + 1;
-        x.fillStyle = '#e01010';
-        const star = (cx, cy, s) => {
-          x.beginPath();
-          for (let k = 0; k < 10; k++) {
-            const a = k * Math.PI / 5 - Math.PI / 2, rr = k % 2 ? s * 0.45 : s;
-            x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.9);
-          }
-          x.fill();
-        };
-        for (const u of [0.25, 0.75]) for (let k = 0; k < stars; k++) {
-          const a = (k / stars) * Math.PI * 2;
-          const rr = stars === 1 ? 0 : 7;
-          star(u * W + Math.cos(a) * rr, H / 2 + Math.sin(a) * rr * 0.8, 4);
-        }
-      },
-    },
-    mat: { fx: 3, rim: 0xffd040, rimAmt: 1.0, emissiveAmt: 0.5, reflect: 0.3, opacity: 0.85 }, trail: '#ffb020',
-  },
-  {
-    id: 'gold', name: 'GOLD', desc: 'Solid gold. Terribly impractical.', unlock: { ach: 'gold_rush' },
-    tex: {
-      color: n => n === 0 ? '#fff4d0' : n === 8 ? '#2a1a00' : ['#ffd040', '#e0a020', '#ffe070', '#c08010', '#ffc030', '#d09020', '#fff0a0'][(n - 1) % 7],
-      white: '#fff0c0', numBg: '#2a1a00', numFg: '#ffd040',
-    },
-    mat: { reflect: 0.75, spec: 1.6, rim: 0xffd040, rimAmt: 0.6, tint: 0xffe8a0 }, trail: '#ffd040',
-  },
-  {
-    id: 'chrome', name: 'CHROME', desc: 'Liquid metal. Reflects your mistakes.', unlock: { ach: 'boss_slayer' },
-    tex: { color: n => n === 8 ? '#303038' : '#c8ccd8', white: '#e8ecf4', numBg: '#101018', numFg: '#e8ecf4', cueDot: false },
-    mat: { reflect: 0.95, spec: 2.0, rimAmt: 0.3, bands: 5 },
-  },
-  {
-    id: 'blood', name: 'BLOOD', desc: 'Awarded for your many, many scratches.', unlock: { ach: 'scratch_master' },
-    tex: {
-      color: n => n === 0 ? '#f0e0e0' : n === 8 ? '#0a0000' : ['#a00010', '#600008', '#d01020', '#400004', '#ff2030', '#800010', '#300000'][(n - 1) % 7],
-      white: '#e8d8d0', numBg: '#1a0000', numFg: '#ff3030',
-      pattern: (x, W, H, n) => {
-        const r = rng(n * 3 + 9);
-        x.fillStyle = '#5a0006';
-        for (let i = 0; i < 6; i++) { const px = r() * W; x.fillRect(px, 0, 2, 4 + r() * 16); x.beginPath(); x.arc(px + 1, 4 + r() * 16, 2, 0, 7); x.fill(); }
-      },
-    },
-    mat: { reflect: 0.35, spec: 1.4, rim: 0xff0020, rimAmt: 0.5 }, trail: '#ff0020',
-  },
-  {
-    id: 'eyes', name: 'EYEBALLS', desc: 'They are watching the shot too.', unlock: { ach: 'how' },
-    tex: {
-      color: () => '#f4f0ec', white: '#f4f0ec', numbers: false, cueDot: false,
-      pattern: (x, W, H, n) => {
-        const iris = n === 0 ? '#60c0ff' : n === 8 ? '#000000' : ballColor(n);
-        // veins
-        const r = rng(n * 5 + 3);
-        x.strokeStyle = 'rgba(200,20,30,0.6)';
-        for (let i = 0; i < 10; i++) {
-          x.beginPath(); let px = r() * W, py = r() > 0.5 ? 0 : H; x.moveTo(px, py);
-          for (let k = 0; k < 5; k++) { px += (r() - 0.5) * 12; py += (py < H / 2 ? 1 : -1) * 4; x.lineTo(px, py); }
-          x.stroke();
-        }
-        const cx = W * 0.25, cy = H / 2;
-        x.fillStyle = iris; x.beginPath(); x.ellipse(cx, cy, 13, 12, 0, 0, 7); x.fill();
-        x.fillStyle = '#000'; x.beginPath(); x.ellipse(cx, cy, 6, 6, 0, 0, 7); x.fill();
-        x.fillStyle = '#fff'; x.fillRect(cx - 4, cy - 5, 3, 3);
-        if (n > 0 && n !== 8) {
-          x.fillStyle = '#111'; x.font = 'bold 7px "Press Start 2P", monospace'; x.textAlign = 'center'; x.textBaseline = 'middle';
-          x.fillText(String(n), W * 0.75, H / 2);
-        }
-      },
-    },
-    mat: { reflect: 0.3, spec: 1.6, rimAmt: 0.2 },
-  },
-  {
-    id: 'glass', name: 'GLASS', desc: 'Fragile-looking. Perfectly unbreakable. Probably.', unlock: { ach: 'perfect' },
-    tex: { white: '#dff4ff', numBg: '#dff4ff' },
-    mat: { opacity: 0.45, reflect: 0.6, spec: 1.8, rim: 0xa0e0ff, rimAmt: 0.9 }, trail: '#a0e0ff',
-  },
-  {
-    id: 'molten', name: 'MOLTEN', desc: 'Cooled rock with a furnace inside. For those who ran it at HEAT V.', unlock: { ach: 'too_hot' },
-    tex: {
-      color: n => n === 0 ? '#3a3230' : '#1c1614', white: '#2a2220', numBg: '#ff6a10', numFg: '#1a0800', cue: '#4a403c', cueDot: '#ff6a10',
-      pattern: (x, W, H, n) => {
-        const r = rng(n * 11 + 5);
-        x.strokeStyle = n === 8 ? '#ff2010' : '#ff7a18'; x.lineWidth = 1.5;
-        for (let i = 0; i < 9; i++) {
-          x.beginPath(); let px = r() * W, py = r() * H; x.moveTo(px, py);
-          for (let k = 0; k < 6; k++) { px += (r() - 0.5) * 20; py += (r() - 0.5) * 14; x.lineTo(px, py); }
-          x.stroke();
-        }
-      },
-    },
-    mat: { emissive: 0xff6a10, emissiveAmt: 0.35, reflect: 0.2, spec: 1.2, rim: 0xff4010, rimAmt: 0.6 }, trail: '#ff5010',
-  },
-  {
-    id: 'daybreak', name: 'DAYBREAK', desc: 'Pastel morning colours. Earned by finishing a Daily Scratch.', unlock: { ach: 'daily' },
-    tex: { color: n => n === 0 ? '#fff8f0' : n === 8 ? '#3a3050' : ['#ffd8a0', '#a8c8ff', '#ffa8b0', '#c8b0ff', '#ffc890', '#a8e8c0', '#e8a0a8'][(n - 1) % 7], white: '#fff8f0', numBg: '#fff8f0', numFg: '#3a3050' },
-    mat: { reflect: 0.25, spec: 1.1, rim: 0xffc0a0, rimAmt: 0.4 }, trail: '#ffc8a0',
-  },
-  {
-    id: 'eights', name: 'ALL EIGHTS', desc: 'It is always the 8. It was always the 8.', unlock: { ach: 'eights' },
-    tex: { color: n => n === 0 ? '#f4f0e6' : '#101014', white: '#f4f0e6', numBg: '#f4f0e6', numFg: '#101014' },
-    mat: { reflect: 0.3, spec: 1.4, rim: 0x7060ff, rimAmt: 0.5 }, trail: '#7060ff',
-  },
-  {
-    id: 'alchemy', name: 'ALCHEMY', desc: 'Swirled metals that never quite settle. For finding five hidden synergies.', unlock: { ach: 'synergist' },
-    tex: {
-      color: n => n === 0 ? '#f0f4ff' : n === 8 ? '#141018' : ['#c08a30', '#6ab0c0', '#b04a6a', '#80a040', '#a060c0', '#d0a050', '#4a8aa0'][(n - 1) % 7],
-      white: '#e8e0d0', numBg: '#201810', numFg: '#ffe0a0',
-      pattern: (x, W, H, n) => {
-        const r = rng(n * 19 + 7);
-        x.globalAlpha = 0.5;
-        for (let i = 0; i < 10; i++) { x.strokeStyle = r() > 0.5 ? '#ffe8a0' : '#40ffe0'; x.beginPath(); x.arc(r() * W, r() * H, 3 + r() * 10, 0, 3 + r() * 3); x.stroke(); }
-        x.globalAlpha = 1;
-      },
-    },
-    mat: { reflect: 0.55, spec: 1.6, rim: 0x40ffe0, rimAmt: 0.6, fx: 1 }, trail: '#40ffe0',
-  },
-  // ---- (these stay out of every list until their mode is found)
-  {
-    id: 'radar', name: 'RADAR', desc: 'Green phosphor targets with a sweep line that never stops.', unlock: { ach: 'supply_chain' }, rajis: true,
-    tex: {
-      color: n => n === 0 ? '#e8ffe0' : n === 8 ? '#041004' : '#0c2a0c', white: '#081808', numBg: '#8fd14f', numFg: '#041004',
-      pattern: (x, W, H) => { x.strokeStyle = 'rgba(143,209,79,0.8)'; for (let i = 0; i < 3; i++) { x.beginPath(); x.arc(W * 0.25, H / 2, 4 + i * 5, 0, 7); x.stroke(); } x.fillStyle = 'rgba(143,209,79,0.6)'; x.fillRect(W * 0.25, H / 2 - 1, 14, 2); },
-    },
-    mat: { emissive: 0x8fd14f, emissiveAmt: 0.45, rim: 0x8fd14f, rimAmt: 0.7, reflect: 0.2, fx: 2 }, trail: '#8fd14f',
-  },
-  {
-    id: 'robot', name: 'ROBOT', desc: 'Brushed steel with one red eye. Two of a kind.', unlock: { ach: 'paulyamin' }, rajis: true,
-    tex: {
-      color: n => n === 0 ? '#e0e4ec' : '#8a909c', white: '#c0c4cc', numbers: false, cueDot: false,
-      pattern: (x, W, H, n) => {
-        x.fillStyle = '#50545c'; for (let i = 0; i < W; i += 8) x.fillRect(i, 0, 1, H);
-        x.fillStyle = n === 0 ? '#2bf0ff' : '#ff2020'; x.fillRect(W * 0.25 - 4, H / 2 - 2, 8, 4);
-        x.fillStyle = '#ffffff'; x.fillRect(W * 0.25 - 3, H / 2 - 1, 2, 1);
-      },
-    },
-    mat: { reflect: 0.7, spec: 1.8, rim: 0xff2020, rimAmt: 0.4, bands: 5 }, trail: '#ff2020',
+    id: 'rajis', name: 'RAJIS', desc: 'A radar sweep that never stops. Somebody is still watching.', unlock: { ach: 'paulyamin' }, rajis: true, animated: true,
+    pal: { cue: '#e8ffe0', mark: '#8fd14f', hues: ['#e8d040', '#3a90ff', '#ff4040', '#b050ff', '#ff9030', '#50ff70', '#ff50b0'], eight: '#041004' },
+    cueMark: 'core', fx: F.radar, mat: { rim: 0x8fd14f, rimAmt: 0.4, reflect: 0.18 }, trail: '#8fd14f',
   },
 ];
+// old ids from earlier saves → their closest successor
+export const BALL_RENAMED = { marble: 'ivory', '8bit': 'digital', toxic: 'neon', orbs: 'plasma', blood: 'classic', eyes: 'classic', glass: 'hologram', molten: 'lava', daybreak: 'classic', eights: 'classic', alchemy: 'liquid', radar: 'rajis', robot: 'cyber' };
 
 // ---------------------------------------------------------------------------
-// CUE SKINS  (paint: x, w, h — v runs butt (0) → tip (h))
+// CUES  (paint: x, w, h — v runs butt (0) → tip (h), drawn on a 16x256 grid)
+// hi: SCRATCH Classic paints these ones itself at high resolution.
+// anim: subtle movement on the stick — never while it would distract the aim.
 function band(x, w, y, h, c) { x.fillStyle = c; x.fillRect(0, y, w, h); }
 function woodGrain(x, w, h, y0, y1, base, dark) {
   band(x, w, y0, y1 - y0, base);
@@ -349,30 +240,87 @@ function tip(x, w, h, ferrule = '#f0ece0', tipC = '#2a6ad0') {
   band(x, w, h - 10, 8, ferrule);
   band(x, w, h - 2, 2, tipC);
 }
+function shaft(x, w, h, y0 = 106, a = '#e8c890', b = '#d8b478') {
+  const g = x.createLinearGradient(0, y0, 0, h - 10);
+  g.addColorStop(0, b); g.addColorStop(1, a);
+  x.fillStyle = g; x.fillRect(0, y0, w, h - 10 - y0);
+}
+function metal(x, w, y0, y1, lo, hi) {
+  for (let i = 0; i < w; i++) { const v = Math.sin(i / w * Math.PI * 2); const c = lo.map((l, k) => Math.round(l + (hi[k] - l) * (0.5 + 0.5 * v))); x.fillStyle = `rgb(${c})`; x.fillRect(i, y0, 1, y1 - y0); }
+}
+function points(x, w, y0, y1, col) {
+  for (let i = 0; i < 4; i++) { x.fillStyle = col; x.beginPath(); x.moveTo(i * 4, y0); x.lineTo(i * 4 + 2, y1); x.lineTo(i * 4 + 4, y0); x.fill(); }
+}
 
 export const CUE_SKINS = [
   {
-    id: 'wood', name: 'CLASSIC WOOD', desc: 'Maple shaft, ebony butt. The honest choice.', unlock: { level: 1 },
+    id: 'wood', name: 'CLASSIC WOOD', desc: 'Rosewood butt, maple shaft. The honest choice.', unlock: { level: 1 }, classy: true, hi: 'wood',
     paint: (x, w, h) => {
-      woodGrain(x, w, h, 0, 100, '#2a120a', '#120604');
+      woodGrain(x, w, h, 0, 100, '#4a1c0c', '#240a04');
       band(x, w, 100, 6, '#e8dcc0');
-      for (let i = 0; i < 4; i++) { x.fillStyle = '#e8dcc0'; x.beginPath(); x.moveTo(i * 4, 100); x.lineTo(i * 4 + 2, 60); x.lineTo(i * 4 + 4, 100); x.fill(); }
-      woodGrain(x, w, h, 106, h - 10, '#e8c890', '#b89060');
+      points(x, w, 100, 64, '#e8dcc0');
+      shaft(x, w, h);
       band(x, w, 20, 2, '#c0a060'); band(x, w, 24, 1, '#c0a060');
       tip(x, w, h);
     },
   },
   {
-    id: 'neon', name: 'NEON', desc: 'A tube of pink gas with delusions of grandeur.', unlock: { level: 3 },
+    id: 'carbon', name: 'CARBON', desc: 'Woven carbon fibre and a black shaft. Quiet and very straight.', unlock: { level: 4 }, classy: true, buy: true, hi: 'carbon',
     paint: (x, w, h) => {
-      band(x, w, 0, h, '#16081e');
-      for (let y = 0; y < h - 10; y += 16) { band(x, w, y, 3, '#ff2bd6'); band(x, w, y + 8, 2, '#2bf0ff'); }
-      tip(x, w, h, '#ffffff', '#ff2bd6');
+      for (let y = 0; y < 104; y += 4) for (let i = 0; i < w; i += 4) { x.fillStyle = ((i + y) / 4) % 2 ? '#2a2c30' : '#141517'; x.fillRect(i, y, 4, 2); x.fillStyle = '#1a1b1d'; x.fillRect(i, y + 2, 4, 2); }
+      band(x, w, 104, 2, '#9ea3aa');
+      band(x, w, 106, h - 116, '#18191c');
+      band(x, w, h - 26, 1, '#d8dce2');
+      tip(x, w, h, '#1a1a1a', '#2f4e7a');
     },
-    mat: { emissive: 0.9 }, trail: { color: '#ff2bd6', kind: 'spark' },
+    mat: { gloss: 1.1, shine: 90 },
   },
   {
-    id: 'bone', name: 'BONE CUE', desc: 'Carved from something large. Do not ask.', unlock: { level: 6 },
+    id: 'ebony', name: 'EBONY', desc: 'Black ebony, silver rings and pearl dots. For beating the Expert AI.', unlock: { ach: 'hustler' }, classy: true, hi: 'ebony',
+    paint: (x, w, h) => {
+      woodGrain(x, w, h, 0, 104, '#15110f', '#070504');
+      for (const y of [8, 40, 70, 100]) band(x, w, y, 2, '#c9ccd2');
+      for (let i = 0; i < 4; i++) { x.fillStyle = '#e8ecf0'; x.fillRect(i * 4 + 1, 54, 2, 2); }
+      shaft(x, w, h);
+      tip(x, w, h);
+    },
+    mat: { gloss: 1.0, shine: 80 },
+  },
+  {
+    id: 'ivory', name: 'IVORY STYLE', desc: 'Cream inlay and black points. A club-room classic.', unlock: { clevel: 4 }, classy: true, hi: 'ivory',
+    paint: (x, w, h) => {
+      band(x, w, 0, 104, '#e9e0cc');
+      points(x, w, 104, 70, '#15110f');
+      for (const y of [10, 44, 48]) band(x, w, y, 1, '#141210');
+      band(x, w, 104, 2, '#141210');
+      shaft(x, w, h);
+      tip(x, w, h, '#f6f3ea', '#2d4a73');
+    },
+  },
+  {
+    id: 'birdseye', name: 'BIRD’S-EYE MAPLE', desc: 'Pale figured maple covered in tiny eyes.', unlock: { clevel: 2 }, classy: true, buy: true, hi: 'birdseye',
+    paint: (x, w, h) => {
+      woodGrain(x, w, h, 0, 104, '#d9b98a', '#a8825a');
+      const r = rng(62);
+      for (let i = 0; i < 40; i++) { x.fillStyle = 'rgba(90,60,30,0.5)'; x.fillRect(r() * w | 0, r() * 100 | 0, 1, 1); }
+      band(x, w, 104, 2, '#2a1a10');
+      shaft(x, w, h);
+      tip(x, w, h);
+    },
+  },
+  {
+    id: 'goldinlay', name: 'GOLD INLAY', desc: 'Dark wood, gold points, gold rings. For winning a Classic tournament.', unlock: { ach: 'tourney' }, classy: true, hi: 'goldinlay',
+    paint: (x, w, h) => {
+      woodGrain(x, w, h, 0, 104, '#1a0e08', '#0a0503');
+      points(x, w, 104, 70, '#d8b060');
+      for (const y of [6, 36, 66, 100]) band(x, w, y, 2, '#d8b060');
+      shaft(x, w, h);
+      tip(x, w, h, '#f4f1e8', '#1a1a1a');
+    },
+    mat: { gloss: 1.0, shine: 85 },
+  },
+  {
+    id: 'bone', name: 'BONE', desc: 'Carved from something large. Do not ask.', unlock: { level: 7 }, buy: true,
     paint: (x, w, h) => {
       band(x, w, 0, h, '#e8e0c8');
       const r = rng(4);
@@ -383,74 +331,95 @@ export const CUE_SKINS = [
     },
   },
   {
-    id: 'chrome', name: 'CHROME', desc: 'Polished to a mirror. Hands off.', unlock: { level: 9 },
+    id: 'chrome', name: 'CHROME', desc: 'Polished steel end to end. Hands off.', unlock: { level: 9 },
     paint: (x, w, h) => {
-      for (let i = 0; i < w; i++) { const v = 120 + Math.sin(i / w * Math.PI * 2) * 100; x.fillStyle = `rgb(${v},${v + 5},${v + 15})`; x.fillRect(i, 0, 1, h); }
-      band(x, w, 90, 4, '#303038');
+      metal(x, w, 0, h, [70, 74, 84], [230, 234, 242]);
+      band(x, w, 96, 3, '#303038'); band(x, w, 30, 1, '#303038');
       tip(x, w, h, '#ffffff', '#303038');
     },
-    mat: { emissive: 0.3 },
+    mat: { emissive: 0.15, gloss: 1.6, shine: 110 },
   },
   {
-    id: 'katana', name: 'KATANA', desc: 'Folded one thousand times. Cuts the cloth.', unlock: { level: 12 },
+    id: 'volt', name: 'VOLT', desc: 'A dark shaft with a current running through it. It hums.', unlock: { level: 6 }, animated: true,
     paint: (x, w, h) => {
-      band(x, w, 0, 90, '#101010');
-      for (let y = 0; y < 90; y += 6) { x.fillStyle = '#c0a030'; x.fillRect(0, y, w, 1); x.fillStyle = '#301818'; x.fillRect(w / 2 - 2, y + 1, 4, 3); }
-      band(x, w, 90, 8, '#c0a030');
-      for (let i = 0; i < w; i++) { const v = 170 + Math.sin(i / w * Math.PI * 2) * 70; x.fillStyle = `rgb(${v},${v},${v + 10})`; x.fillRect(i, 98, 1, h - 98); }
-      band(x, w, h - 40, 1, '#ffffff');
-      tip(x, w, h, '#e0e0e8', '#e0e0e8');
+      band(x, w, 0, h, '#0c1020');
+      const r = rng(17);
+      x.fillStyle = '#4ac8ff';
+      let px = w / 2;
+      for (let y = 0; y < h - 12; y += 2) { px = Math.max(1, Math.min(w - 2, px + (r() - 0.5) * 3)); x.fillRect(px | 0, y, 1, 2); if (r() < 0.08) x.fillRect((px | 0) - 2, y, 5, 1); }
+      band(x, w, 100, 3, '#2a4a8a');
+      tip(x, w, h, '#e0f4ff', '#4ac8ff');
     },
-    trail: { color: '#e0f0ff', kind: 'slash' },
+    mat: { emissive: 0.35 }, anim: { kind: 'pulse', speed: 7, amt: 0.3, flicker: true },
   },
   {
-    id: 'flame', name: 'FLAMING CUE', desc: 'Hot rod decals. Actually on fire.', unlock: { level: 15 },
+    id: 'ember', name: 'EMBER', desc: 'Charred wood with coals still glowing in the cracks.', unlock: { level: 15 }, animated: true,
     paint: (x, w, h) => {
-      band(x, w, 0, h, '#140404');
-      const r = rng(8);
-      for (let y = 0; y < 150; y += 2) {
-        const k = y / 150;
-        x.fillStyle = k < 0.5 ? '#ff3010' : k < 0.8 ? '#ff9010' : '#ffe040';
-        const fw = (1 - k) * w * (0.6 + r() * 0.4);
-        x.fillRect((w - fw) / 2, y, fw, 2);
+      woodGrain(x, w, h, 0, h - 10, '#1c100a', '#0a0402');
+      const r = rng(23);
+      for (let i = 0; i < 26; i++) {
+        const y0 = r() * (h - 30);
+        x.fillStyle = r() < 0.6 ? '#ff5a10' : '#ffb030';
+        let px = r() * w;
+        for (let k = 0; k < 6; k++) { x.fillRect(px | 0, y0 + k * 2, 1, 2); px += (r() - 0.5) * 2; }
       }
-      tip(x, w, h, '#ffe0a0', '#ff3010');
+      tip(x, w, h, '#3a2a20', '#ff5a10');
     },
-    mat: { emissive: 0.5 }, trail: { color: '#ff6010', kind: 'fire' },
+    mat: { emissive: 0.4 }, anim: { kind: 'pulse', speed: 1.3, amt: 0.35 },
   },
   {
-    id: 'glitch', name: 'GLITCH CUE', desc: 'ERR_CUE_NOT_FOUND. Shoots fine though.', unlock: { level: 18 },
+    id: 'nebula', name: 'NEBULA', desc: 'Deep space, drifting very slowly down the shaft.', unlock: { level: 12 }, animated: true,
     paint: (x, w, h) => {
-      const r = rng(66);
-      for (let y = 0; y < h; y += 2) {
-        const c = ['#ff00ff', '#00ffff', '#ffffff', '#101010', '#00ff40'][(r() * 5) | 0];
-        x.fillStyle = r() > 0.6 ? c : '#101018';
-        x.fillRect(0, y, w, 2);
+      band(x, w, 0, h, '#08061a');
+      const r = rng(31);
+      for (let i = 0; i < 26; i++) {
+        const cy = r() * h, rr = 6 + r() * 18;
+        const g = x.createRadialGradient(w / 2, cy, 0, w / 2, cy, rr);
+        g.addColorStop(0, r() > 0.5 ? 'rgba(255,70,200,0.45)' : 'rgba(70,150,255,0.45)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+        x.fillStyle = g; x.fillRect(0, cy - rr, w, rr * 2);
       }
-      tip(x, w, h, '#00ffff', '#ff00ff');
+      x.fillStyle = '#ffffff';
+      for (let i = 0; i < 40; i++) x.fillRect(r() * w | 0, r() * h | 0, 1, 1);
     },
-    mat: { emissive: 0.6, glitch: true }, trail: { color: '#00ffff', kind: 'glitch' },
+    mat: { emissive: 0.45 }, anim: { kind: 'scroll', v: 0.012 }, tipPaint: ['#e8e0ff', '#6a5cff'],
   },
   {
-    id: 'dragon', name: 'DRAGON', desc: 'Scales that shimmer red and gold.', unlock: { ach: 'nuclear' },
+    id: 'void', name: 'VOID', desc: 'A black shaft with a violet edge that swirls toward the tip.', unlock: { level: 18 }, animated: true,
     paint: (x, w, h) => {
-      band(x, w, 0, h - 10, '#500808');
-      for (let y = 0; y < h - 20; y += 5) for (let i = (y / 5 % 2) * 2; i < w; i += 4) {
-        x.fillStyle = '#c02010'; x.fillRect(i, y, 3, 3); x.fillStyle = '#ffc040'; x.fillRect(i, y, 1, 1);
-      }
-      band(x, w, 100, 6, '#ffc040');
-      tip(x, w, h, '#ffe8a0', '#801010');
+      band(x, w, 0, h, '#050308');
+      for (let y = 0; y < h; y += 8) { x.fillStyle = 'rgba(154,75,255,0.55)'; x.fillRect(((y / 8) % 4) * 4, y, 4, 3); x.fillStyle = 'rgba(64,255,224,0.25)'; x.fillRect(((y / 8 + 2) % 4) * 4, y + 3, 4, 2); }
     },
-    mat: { emissive: 0.25 }, trail: { color: '#ff4020', kind: 'fire' },
+    mat: { emissive: 0.5 }, anim: { kind: 'scroll', v: -0.05 }, tipPaint: ['#b080ff', '#050308'],
   },
   {
-    id: 'glass', name: 'TRANSPARENT', desc: 'A crystal cue. You can see the balls through it.', unlock: { ach: 'ghost' },
+    id: 'glass', name: 'GLASS', desc: 'A crystal cue with a glint that travels down it.', unlock: { ach: 'ghost' }, animated: true,
     paint: (x, w, h) => {
       band(x, w, 0, h, '#c0f0ff');
       for (let y = 0; y < h; y += 12) band(x, w, y, 1, '#ffffff');
       tip(x, w, h, '#ffffff', '#80c0ff');
     },
-    mat: { opacity: 0.45, emissive: 0.4 }, trail: { color: '#a0e0ff', kind: 'spark' },
+    mat: { opacity: 0.5, emissive: 0.35 }, anim: { kind: 'glint', speed: 0.35 },
+  },
+  {
+    id: 'katana', name: 'KATANA', desc: 'Wrapped handle, polished blade. Cuts the cloth.', unlock: { level: 13 },
+    paint: (x, w, h) => {
+      band(x, w, 0, 90, '#101010');
+      for (let y = 0; y < 90; y += 6) { x.fillStyle = '#c0a030'; x.fillRect(0, y, w, 1); x.fillStyle = '#301818'; x.fillRect(w / 2 - 2, y + 1, 4, 3); }
+      band(x, w, 90, 8, '#c0a030');
+      metal(x, w, 98, h, [110, 110, 120], [240, 240, 250]);
+      band(x, w, h - 40, 1, '#ffffff');
+      tip(x, w, h, '#e0e0e8', '#e0e0e8');
+    },
+  },
+  {
+    id: 'dragon', name: 'DRAGON', desc: 'Scales that shimmer red and gold.', unlock: { ach: 'nuclear' },
+    paint: (x, w, h) => {
+      band(x, w, 0, h - 10, '#500808');
+      for (let y = 0; y < h - 20; y += 5) for (let i = (y / 5 % 2) * 2; i < w; i += 4) { x.fillStyle = '#c02010'; x.fillRect(i, y, 3, 3); x.fillStyle = '#ffc040'; x.fillRect(i, y, 1, 1); }
+      band(x, w, 100, 6, '#ffc040');
+      tip(x, w, h, '#ffe8a0', '#801010');
+    },
+    mat: { emissive: 0.2 },
   },
   {
     id: 'breaker', name: 'THE BREAKER', desc: 'Black and red. For winning a run at BREAK 1 or higher.', unlock: { ach: 'breaker' },
@@ -460,20 +429,28 @@ export const CUE_SKINS = [
       band(x, w, 96, 8, '#e8e0d0');
       tip(x, w, h, '#f0ece0', '#c01020');
     },
-    mat: { emissive: 0.15 }, trail: { color: '#ff2030', kind: 'spark' },
+    mat: { emissive: 0.1 },
   },
   {
     id: 'golden', name: 'GOLDEN CUE', desc: 'For those who beat the House.', unlock: { ach: 'champion' },
     paint: (x, w, h) => {
-      for (let i = 0; i < w; i++) { const v = Math.sin(i / w * Math.PI * 2); x.fillStyle = `rgb(${220 + v * 35},${170 + v * 40},${40 + v * 30})`; x.fillRect(i, 0, 1, h); }
+      metal(x, w, 0, h, [180, 120, 20], [255, 220, 110]);
       for (let y = 20; y < h - 30; y += 30) band(x, w, y, 2, '#fff8c0');
       tip(x, w, h, '#fff8e0', '#c08010');
     },
-    mat: { emissive: 0.45 }, trail: { color: '#ffd040', kind: 'spark' },
+    mat: { emissive: 0.3, gloss: 1.4, shine: 100 },
   },
-];
-
-CUE_SKINS.push(
+  {
+    id: 'eight', name: 'THE EIGHT', desc: 'Black lacquer with an 8 on the butt. It was always the 8.', unlock: { ach: 'eights' },
+    paint: (x, w, h) => {
+      band(x, w, 0, h - 10, '#0c0c10');
+      x.fillStyle = '#f4f0e6'; x.beginPath(); x.ellipse(w / 2, 26, 6, 9, 0, 0, 7); x.fill();
+      x.fillStyle = '#0c0c10'; x.font = 'bold 9px monospace'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('8', w / 2, 27);
+      band(x, w, 100, 2, '#f4f0e6');
+      tip(x, w, h, '#f4f0e6', '#0c0c10');
+    },
+    mat: { gloss: 1.2, shine: 90 },
+  },
   {
     id: 'fineprint', name: 'THE FINE PRINT', desc: 'Covered in tiny clauses nobody reads. For five completed contracts.', unlock: { ach: 'contractor' },
     paint: (x, w, h) => {
@@ -493,28 +470,40 @@ CUE_SKINS.push(
       for (let y = 10; y < h - 20; y += 12) { for (let i = 0; i < 4; i++) x.fillRect(2 + i * 3, y, 1, 7); x.fillRect(1, y + 3, 12, 1); }
       tip(x, w, h, '#e8d8c8', '#c02020');
     },
-    mat: { emissive: 0.2 }, trail: { color: '#c02020', kind: 'spark' },
+    mat: { emissive: 0.15 },
   },
+  // ---- (these stay out of every list until their mode is found)
   {
-    id: 'missile', name: 'MISSILE', desc: 'Stencilled, finned and very much not regulation.', unlock: { ach: 'intercepted' }, rajis: true,
+    id: 'missile', name: 'MISSILE', desc: 'Stencilled, finned and very much not regulation. Richard signed it.', unlock: { ach: 'intercepted' }, rajis: true,
     paint: (x, w, h) => {
       band(x, w, 0, h, '#e8e8e0');
       band(x, w, 0, 18, '#303830');
-      for (let y = 30; y < h - 30; y += 40) { band(x, w, y, 3, '#c02020'); }
-      x.fillStyle = '#303830'; x.font = '6px monospace'; x.fillRect(w / 2 - 2, 60, 4, 30);
+      for (let y = 30; y < h - 30; y += 40) band(x, w, y, 3, '#c02020');
+      x.fillStyle = '#303830'; x.fillRect(w / 2 - 2, 60, 4, 30);
       tip(x, w, h, '#c02020', '#c02020');
     },
-    mat: { emissive: 0.15 }, trail: { color: '#ff3b30', kind: 'fire' },
+    mat: { emissive: 0.1 },
+  },
+  {
+    id: 'radar', name: 'RADAR', desc: 'Phosphor green, with a sweep that runs down the shaft.', unlock: { ach: 'supply_chain' }, rajis: true, animated: true,
+    paint: (x, w, h) => {
+      band(x, w, 0, h, '#061408');
+      x.fillStyle = 'rgba(143,209,79,0.55)';
+      for (let y = 0; y < h - 10; y += 10) x.fillRect(0, y, w, 1);
+      for (let i = 0; i < w; i += 4) x.fillRect(i, 0, 1, h - 10);
+      tip(x, w, h, '#8fd14f', '#061408');
+    },
+    mat: { emissive: 0.45 }, anim: { kind: 'glint', speed: 0.5, color: 0x8fd14f },
   },
   {
     id: 'cyberbullet', name: 'CYBER BULLET', desc: 'Grey paint, a racing stripe and two red tail lights on the butt.', unlock: { ach: 'machine_learning' }, rajis: true,
     paint: (x, w, h) => {
-      for (let i = 0; i < w; i++) { const v = 110 + Math.sin(i / w * Math.PI * 2) * 40; x.fillStyle = `rgb(${v},${v + 4},${v + 10})`; x.fillRect(i, 0, 1, h); }
+      metal(x, w, 0, h, [70, 74, 80], [150, 154, 160]);
       band(x, w, 0, 4, '#ff2020');
       x.fillStyle = '#e8ecf0'; x.fillRect(w / 2 - 1, 8, 2, h - 30);
       tip(x, w, h, '#e8ecf0', '#2a2e36');
     },
-    mat: { emissive: 0.25 }, trail: { color: '#c8ccd8', kind: 'spark' },
+    mat: { emissive: 0.15 },
   },
   {
     id: 'stripe', name: 'WARNING STRIPE', desc: 'Black and yellow all the way down. Heavy machinery.', unlock: { ach: 'heavy_industry' }, rajis: true,
@@ -522,15 +511,69 @@ CUE_SKINS.push(
       for (let y = 0; y < h - 10; y += 2) { const k = Math.floor((y / 2) / 4) % 2; x.fillStyle = k ? '#f5c542' : '#141414'; x.fillRect(0, y, w, 2); }
       tip(x, w, h, '#f5c542', '#141414');
     },
-    mat: { emissive: 0.15 }, trail: { color: '#f5c542', kind: 'spark' },
+    mat: { emissive: 0.1 },
   },
-);
+];
+for (const c of CUE_SKINS) if (c.tipPaint) { const p = c.paint, [f, t] = c.tipPaint; c.paint = (x, w, h) => { p(x, w, h); tip(x, w, h, f, t); }; }
+export const CUE_RENAMED = { neon: 'volt', flame: 'ember', glitch: 'void' };
+
+// ---------------------------------------------------------------------------
+// FELTS — the cloth, separate from the room. 'theme' keeps each table's own.
+// fx: a very quiet animated layer on the cloth (never over the balls' contrast)
+export const FELTS = [
+  { id: 'theme', name: 'CLUB DEFAULT', desc: 'Whatever cloth each room comes with.', unlock: { level: 1 }, rogueOnly: true },
+  { id: 'green', name: 'EMERALD', desc: 'Tournament green. The one your eyes expect.', felt: '#1f6441', cushion: '#1a5537', unlock: { level: 1 }, classy: true },
+  { id: 'burgundy', name: 'BURGUNDY', desc: 'Deep wine red, like an old private club.', felt: '#6a1c29', cushion: '#581722', unlock: { level: 3 }, classy: true, buy: true },
+  { id: 'navy', name: 'NAVY', desc: 'Dark blue and calm. Balls look brighter on it.', felt: '#1c2d57', cushion: '#172649', unlock: { level: 4 }, classy: true, buy: true },
+  { id: 'blue', name: 'ROYAL BLUE', desc: 'The bright blue of televised pool. For finishing a Daily Scratch.', felt: '#1d5a8f', cushion: '#184c79', unlock: { ach: 'daily' }, classy: true },
+  { id: 'black', name: 'BLACK', desc: 'Black cloth. Everything on it looks expensive.', felt: '#1d1d20', cushion: '#18181a', unlock: { level: 7 }, classy: true, buy: true },
+  { id: 'red', name: 'CHAMPIONSHIP RED', desc: 'A red you only see at finals.', felt: '#7a1a1e', cushion: '#661519', unlock: { clevel: 3 }, classy: true },
+  { id: 'teal', name: 'TEAL', desc: 'Somewhere between the green and the blue.', felt: '#12575c', cushion: '#0f494d', unlock: { level: 5 }, classy: true, buy: true },
+  { id: 'slate', name: 'SLATE GREY', desc: 'Cool grey. Easy on the eyes after midnight.', felt: '#454a50', cushion: '#3a3e43', unlock: { clevel: 5 }, classy: true },
+  { id: 'tournament', name: 'TOURNAMENT', desc: 'Championship blue-green with a gold head string. For winning a Classic tournament.', felt: '#16585e', cushion: '#124a4f', unlock: { ach: 'tourney' }, classy: true, line: '#c8a24a' },
+  { id: 'afterhours', name: 'AFTERHOURS', desc: 'Worn green cloth. Now and then a lamp passes over it that is not in the room.', felt: '#0f5a34', cushion: '#0b4428', unlock: { ach: 'last_game' }, animated: true, fx: 'sweep' },
+  { id: 'arcade', name: 'ARCADE', desc: 'Purple cloth with the odd pixel of light glinting in the weave.', felt: '#3a2ab0', cushion: '#2a1e8a', unlock: { level: 10 }, animated: true, fx: 'sparkle' },
+  { id: 'tactical', name: 'TACTICAL', desc: 'Olive cloth with a map grid and a radar sweep. Command issue.', felt: '#34401e', cushion: '#262f14', unlock: { ach: 'system_online' }, rajis: true, animated: true, fx: 'radar' },
+];
+
+// SHOT TRAILS — a fast-fading line behind moving balls (never over them)
+export const TRAILS = [
+  { id: 'off', name: 'NO TRAIL', desc: 'Clean. Just the balls.', unlock: { level: 1 }, classy: true },
+  { id: 'light', name: 'LIGHT', desc: 'A soft ribbon in each ball’s own colour.', unlock: { level: 1 } },
+  { id: 'pixel', name: 'PIXEL', desc: 'Square pixels left behind like a crashing sprite.', unlock: { level: 4 } },
+  { id: 'electric', name: 'ELECTRIC', desc: 'A thin blue ribbon that crackles at speed.', unlock: { level: 9 }, animated: true },
+  { id: 'fire', name: 'FIRE', desc: 'Embers that burn out in a blink.', unlock: { ach: 'nuclear' }, animated: true },
+  { id: 'void', name: 'VOID', desc: 'A dark violet wake with motes falling into it.', unlock: { level: 19 }, animated: true },
+  { id: 'radar', name: 'RADAR', desc: 'A dotted green track, like a blip being followed.', unlock: { ach: 'supply_chain' }, rajis: true },
+];
+
+// POCKET EFFECTS — only when a ball actually drops
+export const POCKET_FX = [
+  { id: 'classic', name: 'CLASSIC BURST', desc: 'A burst of colour and a ring of light.', unlock: { level: 1 } },
+  { id: 'quiet', name: 'QUIET', desc: 'Just the sound of the ball dropping.', unlock: { level: 1 }, classy: true },
+  { id: 'pixel', name: 'PIXEL BURST', desc: 'Chunky square pixels, straight out of the cartridge.', unlock: { level: 3 } },
+  { id: 'sparks', name: 'SPARKS', desc: 'A short fan of bright sparks.', unlock: { level: 7 } },
+  { id: 'neon', name: 'NEON FLASH', desc: 'The pocket flashes pink and cyan.', unlock: { level: 10 } },
+  { id: 'holo', name: 'HOLO RIPPLE', desc: 'Three cyan rings ripple out across the felt.', unlock: { level: 13 }, animated: true },
+  { id: 'smoke', name: 'SMOKE', desc: 'A puff of smoke rises from the pocket. For scratching ten times.', unlock: { ach: 'scratch_master' } },
+  { id: 'lockon', name: 'LOCK-ON', desc: 'Target brackets snap shut on the pocket. TARGET DESTROYED.', unlock: { ach: 'intercepted' }, rajis: true },
+];
 
 // tag each cosmetic with its kind so unlock keys never collide (e.g. chrome balls vs chrome cue)
 THEMES.forEach(t => { t.kind = 'theme'; });
 BALL_SKINS.forEach(b => { b.kind = 'ball'; });
 CUE_SKINS.forEach(c => { c.kind = 'cue'; });
+FELTS.forEach(f => { f.kind = 'felt'; });
+TRAILS.forEach(f => { f.kind = 'trail'; });
+POCKET_FX.forEach(f => { f.kind = 'pocket'; });
 
 export function themeById(id) { return THEMES.find(t => t.id === id) || THEMES[0]; }
-export function ballSkinById(id) { return BALL_SKINS.find(t => t.id === id) || BALL_SKINS[0]; }
-export function cueSkinById(id) { return CUE_SKINS.find(t => t.id === id) || CUE_SKINS[0]; }
+export function ballSkinById(id) { id = BALL_RENAMED[id] || id; return BALL_SKINS.find(t => t.id === id) || BALL_SKINS[0]; }
+export function cueSkinById(id) { id = CUE_RENAMED[id] || id; return CUE_SKINS.find(t => t.id === id) || CUE_SKINS[0]; }
+export function feltById(id) { return FELTS.find(t => t.id === id) || FELTS[0]; }
+export function trailById(id) { return TRAILS.find(t => t.id === id) || TRAILS[1]; }
+export function pocketFxById(id) { return POCKET_FX.find(t => t.id === id) || POCKET_FX[0]; }
+
+// every cosmetic list by kind (loadout, collection, unlock notices)
+export const COSMETICS = { ball: BALL_SKINS, cue: CUE_SKINS, felt: FELTS, trail: TRAILS, pocket: POCKET_FX, theme: THEMES };
+export const KIND_NAME = { ball: 'BALLS', cue: 'CUE', felt: 'FELT', trail: 'TRAIL', pocket: 'POCKET FX', theme: 'TABLE' };
