@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SCRATCH: a billiards roguelite you play in your browser</title>
-  <meta name="description" content="Pool was normal until the table started fighting back. A PS1-style billiards roguelite, with a completely normal game of 8-ball hidden inside. Free, in your browser.">
+  <title>SCRATCH: AFTERHOURS · a billiards roguelite you play in your browser</title>
+  <meta name="description" content="Pool was normal until the table started fighting back. A PS1-style billiards roguelite, with a completely normal game of 8-ball hidden inside. Now with the AFTERHOURS update. Free, in your browser.">
   <meta name="theme-color" content="#07050f">
   <link rel="icon" href="media/icon.png">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="SCRATCH">
+  <meta property="og:title" content="SCRATCH: AFTERHOURS">
   <meta property="og:description" content="Pool was normal until the table started fighting back. A PS1-style billiards roguelite you play in your browser.">
   <meta property="og:url" content="https://bouwles.github.io/SCRATCH/">
   <meta property="og:image" content="https://bouwles.github.io/SCRATCH/media/banner.png">
@@ -58,7 +58,8 @@
 
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
     .card { background: var(--panel); border: 1px solid var(--line); padding: 18px 18px 16px; border-radius: 4px; }
-    .card b { display: block; font: 13px 'PS2P', monospace; letter-spacing: 0.08em; color: var(--gold); margin-bottom: 10px; }
+    .card b { display: block; font: 13px/1.5 'PS2P', monospace; letter-spacing: 0.08em; color: var(--gold); margin-bottom: 10px; }
+    .grid.three { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
     .card p { margin: 0; color: var(--ink); font-size: 16px; }
 
     .shots { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
@@ -90,7 +91,7 @@
       <p class="tagline">A billiards roguelite from a lost 1998 disc.</p>
       <p class="sub">Sink balls, collect relics that bend the rules of pool, and work your way down three floors to The House.</p>
       <a class="play" href="play/"><span class="tri" aria-hidden="true"></span>PLAY</a>
-      <p class="meta px"><span>FREE</span> · <span>RUNS IN YOUR BROWSER</span> · <span>MOUSE + KEYBOARD</span> · <span>V1.0.0</span></p>
+      <p class="meta px"><span>FREE</span> · <span>RUNS IN YOUR BROWSER</span> · <span>MOUSE + KEYBOARD</span> · <span>V2.0.0 AFTERHOURS</span></p>
       <p class="touch-note">SCRATCH is played with a mouse. It's best on a computer.</p>
       <p class="links">
         <a href="https://github.com/Bouwles/SCRATCH">Source on GitHub</a>
@@ -107,10 +108,28 @@
     </section>
 
     <section>
+      <h2><small>NEW IN 2.0</small>AFTERHOURS</h2>
+      <p class="sub" style="margin:0 0 18px">The club stays open later now. Your saved progress carries straight over.</p>
+      <div class="grid three">
+        <div class="card"><b>TABLE STATES</b><p>Blackout, Overtime, Jackpot, Static, Low Gravity, Redline, Quiet Hours and House Rules. The whole club changes for a few tables.</p></div>
+        <div class="card"><b>CONTRACTS &amp; BETS</b><p>Sign a contract for a legendary payout. Put your chips on a High Roller table and win them back doubled.</p></div>
+        <div class="card"><b>RIVALS</b><p>Six regulars race you to the goal, one turn after every shot you take. Lose to one twice and they remember you.</p></div>
+        <div class="card"><b>NEW TABLES &amp; BOSSES</b><p>Eight new table types, six Trick Table puzzles, The Collector, The Architect and The Bookie.</p></div>
+        <div class="card"><b>HIDDEN SYNERGIES</b><p>Twelve relic pairs that do something neither does alone. They aren't listed anywhere until you find them.</p></div>
+        <div class="card"><b>NEW MODES</b><p>Boss Rush, One Cue, Chaos and Handicaps. Classic gets a tournament, AI styles and a shot clock.</p></div>
+      </div>
+      <div class="shots" style="margin-top:14px">
+        <a href="media/screens/08-blackout.jpg"><img src="media/screens/08-blackout.jpg" width="1280" height="720" loading="lazy" alt="BLACKOUT: the power is out and the balls glow"></a>
+        <a href="media/screens/11-synergy.jpg"><img src="media/screens/11-synergy.jpg" width="1280" height="720" loading="lazy" alt="A hidden synergy discovered: RAILGUN"></a>
+      </div>
+      <p class="sub" style="margin:18px 0 0">Some runs don't end when The House falls. ...and there are several things we aren't going to tell you about.</p>
+    </section>
+
+    <section>
       <h2><small>WHAT'S INSIDE</small>A run, three floors deep</h2>
       <div class="grid">
-        <div class="card"><b>45 RELICS</b><p>Explosive chalk, balls with orbits, pockets that get hungry. Pick one you already own and it upgrades.</p></div>
-        <div class="card"><b>6 BOSSES</b><p>A table that tilts, pockets that spit, a pocket that eats shots, a Dealer, a Clock, and The House.</p></div>
+        <div class="card"><b>50 RELICS</b><p>Explosive chalk, balls with orbits, pockets that get hungry, and five risk relics. Pick one you already own and it upgrades.</p></div>
+        <div class="card"><b>9 BOSSES</b><p>A table that tilts, pockets that spit, a pocket that eats shots, a Dealer, a Clock, a Collector, an Architect, a Bookie, and The House.</p></div>
         <div class="card"><b>DAILY SCRATCH</b><p>The same seeded run for everyone, every day. Win once to unlock Endless and five BREAK levels.</p></div>
         <div class="card"><b>FAIR SAVES</b><p>Close the tab mid-run and pick it up later. Reloading never gets you a free retry.</p></div>
       </div>
@@ -123,6 +142,10 @@
         <a href="media/screens/02-boss-void.jpg"><img src="media/screens/02-boss-void.jpg" width="1280" height="720" loading="lazy" alt="The Void: a break with Thunderclap"></a>
         <a href="media/screens/03-relics.jpg"><img src="media/screens/03-relics.jpg" width="1280" height="720" loading="lazy" alt="Choosing a relic"></a>
         <a href="media/screens/05-dealer.jpg"><img src="media/screens/05-dealer.jpg" width="1280" height="720" loading="lazy" alt="The Dealer, phase II"></a>
+        <a href="media/screens/09-high-roller.jpg"><img src="media/screens/09-high-roller.jpg" width="1280" height="720" loading="lazy" alt="A High Roller table: place your bet"></a>
+        <a href="media/screens/10-boss-collector.jpg"><img src="media/screens/10-boss-collector.jpg" width="1280" height="720" loading="lazy" alt="The Collector, a new boss, has borrowed a relic"></a>
+        <a href="media/screens/12-afterhours.jpg"><img src="media/screens/12-afterhours.jpg" width="1280" height="720" loading="lazy" alt="After closing time"></a>
+        <a href="media/screens/13-classic-tournament.jpg"><img src="media/screens/13-classic-tournament.jpg" width="1280" height="720" loading="lazy" alt="SCRATCH Classic: the tournament draw"></a>
       </div>
     </section>
 
@@ -135,7 +158,8 @@
         </video>
         <div>
           <p>Press <b>PLAY NORMAL 8-BALL</b> and the tape drags, the CRT clicks off, and you're in a quiet late-night lounge with a jazz trio playing.</p>
-          <p>Play standard 8-ball against four AI levels that plan with the same physics you play with and never cheat. There's also local two-player on one mouse and a practice mode.</p>
+          <p>Play standard 8-ball against four AI levels that plan with the same physics you play with and never cheat. Each level can play in one of five styles, from Cautious to Trickster.</p>
+          <p>There's also a four-player tournament, an optional shot clock, three rooms, local two-player on one mouse and a practice mode.</p>
         </div>
       </div>
     </section>
@@ -147,7 +171,7 @@
         <tr><td>SHOOT</td><td>Hold the left button to charge, then release. The mouse wheel sets the power cap.</td></tr>
         <tr><td>SPIN</td><td>W A S D, or drag the dot on the cue-ball widget.</td></tr>
         <tr><td>CAMERA</td><td>Right-drag to orbit, Q / E to zoom, C for top-down.</td></tr>
-        <tr><td>ITEMS</td><td>1, 2 or 3.</td></tr>
+        <tr><td>ITEMS</td><td>1, 2 or 3. B takes the Bookie's bet.</td></tr>
         <tr><td>PAUSE</td><td>Esc, for settings, fullscreen and the switch to Classic.</td></tr>
       </table>
     </section>
@@ -158,7 +182,7 @@
 
     <footer>
       <div class="by">MADE BY PAUL NERCESSIAN</div>
-      <div>Version 1.0.0 · <a href="https://github.com/Bouwles/SCRATCH">GitHub</a> · <a href="https://github.com/Bouwles/SCRATCH/blob/main/ATTRIBUTIONS.md">Credits and licences</a></div>
+      <div>Version 2.0.0 · AFTERHOURS · <a href="https://github.com/Bouwles/SCRATCH">GitHub</a> · <a href="https://github.com/Bouwles/SCRATCH/blob/main/CHANGELOG.md">What's new</a> · <a href="https://github.com/Bouwles/SCRATCH/blob/main/ATTRIBUTIONS.md">Credits and licences</a></div>
       <div style="margin-top:8px">Built with three.js. Every sound and image is generated by the game as you play.</div>
     </footer>
   </main>

@@ -252,7 +252,7 @@ export class AudioEngine {
   }
 
   crowd(amount = 0.5) {
-    if (!this.ctx) return;
+    if (!this.ctx || this.quiet) return;
     const t = this.now;
     const dur = 1.2 + amount * 1.5;
     this.noise({ t, dur, vol: 0.12 * amount + 0.04, type: 'bandpass', freq: 900, q: 0.6, attack: 0.15, verb: 0.5 });
@@ -265,7 +265,7 @@ export class AudioEngine {
   }
 
   groan() {
-    if (!this.ctx) return;
+    if (!this.ctx || this.quiet) return;
     const t = this.now;
     this.noise({ t, dur: 1.0, vol: 0.1, type: 'bandpass', freq: 500, q: 0.8, attack: 0.1, verb: 0.5 });
     for (let i = 0; i < 3; i++) this.tone(300 + Math.random() * 100, { t: t + i * 0.05, type: 'sawtooth', dur: 0.8, vol: 0.025, slide: 180, filter: 900, q: 3, verb: 0.5, attack: 0.1 });
@@ -474,6 +474,52 @@ export class AudioEngine {
     this.tone(40, { t, type: 'sine', dur: 0.55, vol: 0.4, slide: 95, slideTime: 0.25 });
     this.noise({ t, dur: 0.3, vol: 0.18, type: 'lowpass', freq: 320 });
     this.tone(5200, { t: t + 0.05, type: 'sine', dur: 0.25, vol: 0.015, slide: 7600 });
+  }
+
+  // ------------------------------------------------------ AFTERHOURS sfx
+  siren(dur = 1.2) {
+    if (!this.ctx) return;
+    const t = this.now;
+    for (let i = 0; i < Math.ceil(dur / 0.6); i++) {
+      this.tone(620, { t: t + i * 0.6, type: 'sawtooth', dur: 0.32, vol: 0.06, slide: 940, slideTime: 0.3, filter: 2200 });
+      this.tone(940, { t: t + i * 0.6 + 0.3, type: 'sawtooth', dur: 0.3, vol: 0.06, slide: 620, slideTime: 0.28, filter: 2200 });
+    }
+  }
+  engine(dur = 1.2) {
+    if (!this.ctx) return;
+    const t = this.now;
+    this.tone(48, { t, type: 'sawtooth', dur, vol: 0.16, slide: 95, slideTime: dur * 0.8, filter: 420, q: 4, attack: 0.05 });
+    this.tone(52, { t, type: 'square', dur: dur * 0.9, vol: 0.05, slide: 100, slideTime: dur * 0.8, filter: 260 });
+    this.noise({ t, dur, vol: 0.08, type: 'lowpass', freq: 300, slide: 900, attack: 0.1 });
+  }
+  radarPing() { if (this.ctx) this.tone(1320, { type: 'sine', dur: 0.5, vol: 0.05, verb: 0.7 }); }
+  doorLock() {
+    if (!this.ctx) return;
+    const t = this.now;
+    this.noise({ t, dur: 0.12, vol: 0.4, type: 'lowpass', freq: 700 });
+    this.tone(90, { t, type: 'square', dur: 0.15, vol: 0.2, slide: 60, filter: 500 });
+    this.tone(1800, { t: t + 0.22, type: 'square', dur: 0.03, vol: 0.08, filter: 5000 });
+    this.noise({ t: t + 0.22, dur: 0.05, vol: 0.2, type: 'bandpass', freq: 2400, q: 3 });
+  }
+  lightsOff() {
+    if (!this.ctx) return;
+    const t = this.now;
+    this.noise({ t, dur: 0.08, vol: 0.5, type: 'highpass', freq: 1200 });
+    this.tone(55, { t, type: 'sine', dur: 0.5, vol: 0.5, slide: 30 });
+    this.tone(120, { t, type: 'sawtooth', dur: 1.4, vol: 0.03, slide: 60, filter: 400, attack: 0.05 });
+  }
+  // a short announcement for each Table State
+  stateSting(id) {
+    if (!this.ctx) return;
+    const t = this.now;
+    if (id === 'blackout') { this.lightsOff(); return; }
+    if (id === 'overtime') { for (let i = 0; i < 6; i++) this.tone(i % 2 ? 1600 : 1200, { t: t + i * 0.12, type: 'square', dur: 0.03, vol: 0.06, filter: 4000 }); return; }
+    if (id === 'jackpot') { this.coin(8); this.tone(1046.5, { t: t + 0.5, type: 'triangle', dur: 0.8, vol: 0.12, verb: 0.6 }); return; }
+    if (id === 'static') { this.zap(); this.noise({ t, dur: 0.8, vol: 0.12, type: 'highpass', freq: 3000, attack: 0.02 }); return; }
+    if (id === 'lowgrav') { this.tone(220, { t, type: 'sine', dur: 1.4, vol: 0.12, slide: 880, verb: 0.8 }); this.tone(330, { t: t + 0.1, type: 'sine', dur: 1.3, vol: 0.08, slide: 1320, verb: 0.8 }); return; }
+    if (id === 'redline') { this.heatUp(3); return; }
+    if (id === 'quiet') { this.tone(880, { t, type: 'sine', dur: 2.5, vol: 0.05, verb: 0.9 }); return; }
+    if (id === 'houserules') { this.noise({ t, dur: 0.06, vol: 0.5, type: 'lowpass', freq: 900 }); this.tone(110, { t, type: 'square', dur: 0.2, vol: 0.2, filter: 600 }); this.noise({ t: t + 0.25, dur: 0.06, vol: 0.5, type: 'lowpass', freq: 900 }); return; }
   }
 
   playMusic(track) {
@@ -871,6 +917,74 @@ const TRACKS = {
         if (beat) m.brush(t, 0.012, spb * 3.5);
         if (i === 0 && m.bar % 2 === 1) m.kick(t, 0.12);
       }
+    },
+  },
+  // QUIET HOURS: almost nothing, on purpose
+  quiet: {
+    bpm: 70,
+    step(m, i, t, spb) {
+      const chords = [[57, 60, 64], [53, 57, 60], [55, 59, 62], [52, 55, 59]];
+      const c = Math.floor((m.bar - 1) / 2) % 4;
+      if (i === 0 && (m.bar - 1) % 2 === 0) m.pad(t, chords[c], spb * 32, 0.02, 700);
+      if (i === 8 && m.variation > 0.6) m.rhodes(t, [chords[c][m.bar % 3] + 12], 0.018, spb * 8);
+      if (i % 8 === 0) m.hat(t, 0.012);
+    },
+  },
+  // after closing: the lounge with the lights off and the tape stretched
+  afterhours: {
+    bpm: 72, swing: 0.2,
+    step(m, i, t, spb) {
+      m.wobble = 0.5;
+      const chords = [[55, 58, 62, 65], [53, 56, 60, 63], [51, 55, 58, 62], [50, 53, 57, 60]];
+      const bass = [43, 41, 39, 38];
+      const c = (m.bar - 1) % 4;
+      if (i === 0) m.rhodes(t, chords[c], 0.04, spb * 14);
+      if (i === 0 || i === 10) m.e.tone(NOTE(bass[c]), { t, type: 'sine', dur: spb * 6, vol: 0.2, dest: m.out, attack: 0.03 });
+      if (i === 4 || i === 12) m.snare(t, 0.12, 0.6);
+      if (i % 4 === 2) m.hat(t, 0.025);
+      if ((i === 6 || i === 14) && m.variation > 0.55) m.pluck(t, chords[c][(i + m.bar) % 4] + 12, 0.018, 'sine', 1.0);
+      m.crackle(t); m.crackle(t);
+    },
+  },
+  // THE OWNER: a heartbeat, a drone, a piano that will not resolve
+  owner: {
+    bpm: 92,
+    step(m, i, t, spb) {
+      const I = m.intensity;
+      if (i === 0 || i === 3) m.kick(t, i === 0 ? 0.9 : 0.55);
+      if (i === 0 && (m.bar - 1) % 2 === 0) m.reese(t, 26, spb * 31, 0.12 + I * 0.06, 220 + I * 200);
+      if (i === 8 && m.variation > 0.3) m.rhodes(t, [62, 65, 68], 0.035, spb * 6);
+      if (I > 0.6 && i % 4 === 2) m.hat(t, 0.04);
+      if (I > 0.8 && (i === 4 || i === 12)) m.snare(t, 0.3, 0.4);
+      if (i === 14 && m.variation > 0.7) m.pluck(t, 74, 0.02, 'triangle', 0.8);
+    },
+  },
+  // RAJIS: marching snare, square-wave brass, a bass that never stops
+  rajis: {
+    bpm: 138,
+    step(m, i, t, spb) {
+      const I = m.intensity;
+      const roots = [38, 38, 41, 36];
+      const c = (m.bar - 1) % 4;
+      if (i % 4 === 0) m.kick(t, 0.8);
+      if (i === 4 || i === 12) m.snare(t, 0.45, 0.2);
+      if (i === 14 || i === 15 || (i === 7 && m.variation > 0.5)) m.snare(t, 0.18, 0.05);
+      if (i % 2 === 0) m.hat(t, 0.05);
+      if (i % 2 === 0) m.e.tone(NOTE(roots[c] + (i % 8 === 6 ? 7 : 0)), { t, type: 'square', dur: spb * 1.6, vol: 0.09, filter: 700, dest: m.out });
+      const mel = [62, 62, 65, 67, 69, 67, 65, 62];
+      if (I > 0.3 && m.bar % 2 === 1 && i % 2 === 0) m.pluck(t, mel[(i / 2) | 0] + (c === 2 ? 3 : 0), 0.035, 'square', 0.18, false);
+      if (i === 0 && (m.bar - 1) % 4 === 0) m.pad(t, [50, 57, 62], spb * 64, 0.02, 900);
+    },
+  },
+  rajisboss: {
+    bpm: 164,
+    step(m, i, t, spb) {
+      const roots = [33, 33, 36, 31];
+      const c = (m.bar - 1) % 4;
+      playBreak(m, i, t, 0.95, ['KSAB', 'KXAB', 'KSGB', 'KXRR']);
+      if (i % 2 === 0) m.e.tone(NOTE(roots[c] + 12), { t, type: 'sawtooth', dur: spb * 1.5, vol: 0.08, filter: 600, dest: m.out });
+      if (i === 0) m.reese(t, roots[c] + 12, spb * 15, 0.14, 420);
+      if ((i === 0 || i === 8) && m.variation > 0.4) m.e.tone(NOTE(76), { t, type: 'sawtooth', dur: spb * 3, vol: 0.03, slide: NOTE(81), slideTime: spb * 3, filter: 3000, dest: m.out });
     },
   },
   // dark, heavy dnb for bosses

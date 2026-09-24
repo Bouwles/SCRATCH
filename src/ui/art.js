@@ -216,6 +216,37 @@ const ART = {
   heal: p => { M.heart(p, 4, 5, 'r'); M.sparkle(p, 13, 3, 'w'); },
 };
 
+// ---- AFTERHOURS: risk relics
+Object.assign(ART, {
+  double_edge: p => { p.line(3, 13, 12, 2, 'S', 2); p.line(4, 13, 13, 2, 's'); p.rect(1, 12, 4, 3, 'n'); M.sparkle(p, 13, 2, 'r'); M.sparkle(p, 9, 6, 'w'); },
+  debt: p => { p.rect(3, 2, 10, 12, 'S'); p.rect(3, 2, 10, 2, 'r'); for (let y = 6; y < 13; y += 2) p.rect(5, y, 6, 1, 'd'); M.chip(p, 12, 12, 3); p.set(12, 12, 'r'); },
+  blind_faith: p => { M.eye(p, 8, 8, 'c'); p.rect(2, 7, 12, 3, 'k'); p.rect(2, 7, 12, 1, 'd'); M.sparkle(p, 13, 3, 'y'); },
+  final_form: p => { M.flame(p, 4, 1); M.burst(p, 8, 12, 3, 'r', 'y'); },
+  last_life: p => { M.heart(p, 4, 4, 'r'); p.line(8, 3, 6, 12, 'k'); M.sparkle(p, 13, 2, 'w'); },
+  // ---- the protocols
+  p_missile: p => { p.line(2, 13, 11, 4, 'S', 2); p.rect(11, 2, 3, 3, 'r'); p.set(3, 11, 'o'); p.set(2, 13, 'y'); p.set(1, 14, 'o'); M.sparkle(p, 14, 13, 'y'); },
+  p_radar: p => { p.ring(8, 8, 6, 'G'); p.ring(8, 8, 3, 'G'); p.line(8, 8, 13, 4, 'g'); p.set(11, 10, 'y'); p.set(5, 5, 'g'); },
+  p_supply: p => { p.rect(3, 6, 10, 8, 'n'); p.rect(3, 6, 10, 1, 'l'); p.line(3, 6, 12, 13, 'N'); p.line(12, 6, 3, 13, 'N'); p.line(8, 1, 8, 5, 's'); p.line(4, 2, 12, 2, 's'); },
+  p_armor: p => { p.rect(3, 2, 10, 7, 's'); for (let j = 0; j < 5; j++) p.rect(3 + j, 9 + j, 10 - j * 2, 1, 's'); p.rect(7, 4, 2, 7, 'S'); p.rect(4, 6, 8, 2, 'S'); },
+  p_drone: p => { p.rect(6, 7, 4, 3, 's'); for (const [x, y] of [[3, 5], [12, 5], [3, 11], [12, 11]]) { p.rect(x - 2, y, 5, 1, 'd'); p.line(x, y, 8, 8, 'd'); } p.set(8, 8, 'g'); },
+  p_overwatch: p => { p.ring(8, 8, 6, 'g'); p.line(8, 1, 8, 15, 'g'); p.line(1, 8, 15, 8, 'g'); p.disc(8, 8, 1, 'r', false); },
+  p_chain: p => { for (let i = 0; i < 3; i++) p.ring(4 + i * 4, 8, 2, i === 1 ? 'y' : 's'); M.arrow(p, 2, 13, 14, 13, 'g'); },
+  p_counter: p => { M.burst(p, 8, 8, 6, 'y', 'o'); p.ring(8, 8, 7, 'c'); p.disc(8, 8, 2, 'c', false); },
+  p_shock: p => { M.burst(p, 8, 9, 7, 'r', 'y'); M.bolt(p, 5, 1, 'w'); },
+  p_repair: p => { p.rect(7, 2, 2, 10, 's'); p.rect(4, 2, 8, 3, 'S'); p.rect(6, 12, 4, 3, 'n'); M.sparkle(p, 13, 4, 'g'); M.sparkle(p, 3, 10, 'g'); },
+  p_intel: p => { p.rect(2, 3, 12, 10, 'l'); p.rect(2, 3, 12, 2, 'n'); for (let y = 7; y < 12; y += 2) p.rect(4, y, 8, 1, 'N'); p.rect(9, 9, 4, 3, 'r'); },
+  p_omega: p => { p.ring(8, 8, 5, 'r'); p.rect(3, 12, 3, 2, 'r'); p.rect(10, 12, 3, 2, 'r'); p.rect(3, 8, 10, 4, null); p.ring(8, 7, 4, 'r'); M.sparkle(p, 14, 2, 'y'); },
+  // ---- rivals (the icon on their table card)
+  rival_hustler: p => { M.cue(p, 2, 14, 13, 3); M.chip(p, 5, 5, 3); M.chip(p, 11, 11, 2); },
+  rival_lunatic: p => { M.spiral(p, 8, 8, 6, 'm'); M.eye(p, 8, 8, 'm'); },
+  rival_banker: p => { M.wall(p, 0, 0, 16, 2, 'g'); p.line(2, 14, 8, 2, 'y'); p.line(8, 2, 14, 14, 'y'); M.chip(p, 8, 11, 3); },
+  rival_ghost: p => { M.ghost(p, 4, 4); p.set(6, 6, 'c'); p.set(8, 6, 'c'); },
+  rival_shark: p => { p.rect(2, 10, 12, 2, 'b'); for (let i = 0; i < 6; i++) p.rect(7 - i, 4 + i, 1 + i, 1, 's'); p.set(13, 9, 'w'); },
+  rival_professor: p => { p.rect(3, 4, 10, 2, 'k'); p.rect(5, 2, 6, 2, 'k'); p.line(12, 5, 14, 11, 'y'); p.disc(8, 10, 3, 'l'); p.set(7, 10, 'k'); p.set(9, 10, 'k'); },
+  // ---- the car (a grey coupe, nobody's in particular)
+  car: p => { p.rect(1, 8, 14, 4, 's'); p.rect(4, 5, 7, 3, 'k'); p.rect(5, 6, 5, 1, 'd'); p.disc(4, 12, 1, 'k', false); p.disc(12, 12, 1, 'k', false); p.set(15, 9, 'w'); p.set(0, 9, 'r'); p.rect(2, 9, 12, 1, 'S'); },
+});
+
 function ART_DICE(p) { p.rect(2, 2, 11, 11, 'w'); p.rect(2, 12, 11, 1, 'S'); [[4, 4], [10, 4], [7, 7]].forEach(([x, y]) => p.set(x, y, 'k')); }
 
 // Achievements: a trophy/medal with a motif badge.
@@ -257,7 +288,44 @@ const ACH = {
   eights: p => { M.ball(p, 5, 5, 3, 'k'); M.ball(p, 11, 5, 3, 'k'); M.ball(p, 5, 11, 3, 'k'); M.ball(p, 11, 11, 3, 'k'); },
   curious: p => { M.eye(p, 8, 8, 'y'); M.sparkle(p, 14, 2, 'w'); },
   secret: p => { p.rect(6, 3, 4, 1, 's'); p.rect(10, 4, 1, 3, 's'); p.rect(8, 7, 2, 1, 's'); p.rect(8, 8, 1, 3, 's'); p.rect(8, 13, 1, 1, 's'); },
+  // AFTERHOURS
+  state_first: p => { M.moon(p, 8, 7, 5); M.sparkle(p, 13, 12, 'y'); },
+  contractor: p => { p.rect(3, 2, 10, 12, 'l'); for (let y = 5; y < 12; y += 2) p.rect(5, y, 6, 1, 'N'); p.line(8, 12, 13, 8, 'b'); },
+  whale: p => { M.chip(p, 5, 11, 4); M.chip(p, 11, 11, 4); M.chip(p, 8, 6, 4); M.chip(p, 8, 2, 2); },
+  rival_beat: p => { M.cue(p, 1, 14, 7, 4); M.cue(p, 14, 14, 9, 4); M.star(p, 8, 4, 'y'); },
+  nemesis: p => { M.skull(p, 4, 4); p.ring(8, 8, 7, 'r'); },
+  synergist: p => { M.ball(p, 5, 8, 3, 'c'); M.ball(p, 11, 8, 3, 'm'); M.sparkle(p, 8, 3, 'y'); M.sparkle(p, 8, 13, 'y'); },
+  mad_science: p => { p.rect(6, 1, 4, 4, 'S'); for (let j = 0; j < 8; j++) p.rect(6 - (j >> 1), 5 + j, 4 + (j >> 1) * 2, 1, j > 3 ? 'g' : 'S'); M.sparkle(p, 12, 3, 'g'); },
+  overcharged: p => { M.bolt(p, 6, 3, 'c'); p.ring(8, 8, 7, 'c'); },
+  trick_table: p => { M.wall(p, 0, 0, 2, 16, 'g'); p.line(3, 14, 13, 2, 'y'); M.ball(p, 13, 2, 1, 'y', { dot: false }); M.star(p, 5, 5, 'y'); },
+  remixed: p => { M.skull(p, 4, 3); M.arrow(p, 2, 13, 13, 13, 'm'); M.arrow(p, 13, 11, 2, 11, 'c'); },
+  boss_rush: p => { for (let i = 0; i < 3; i++) M.skull(p, 1 + i * 5, 4 + (i % 2) * 4); },
+  one_cue: p => { M.cue(p, 2, 14, 14, 2); p.ring(12, 12, 3, 'y'); M.num(p, 11, 10, 2, 'y'); },
+  chaos_win: p => { M.burst(p, 8, 8, 7, 'm', 'c'); M.spiral(p, 8, 8, 4, 'y'); },
+  risky: p => { M.heart(p, 4, 5, 'r'); M.burst(p, 12, 3, 2, 'y', 'o'); },
+  afterhours: p => { M.clock(p, 8, 8, 6); p.rect(10, 9, 1, 1, 'r'); M.moon(p, 13, 3, 2); },
+  last_game: p => { M.ball(p, 8, 8, 6, 'k'); p.disc(8, 8, 3, 'w', false); M.num(p, 6, 6, 8, 'k'); p.ring(8, 8, 7, 'l'); },
+  insomniac: p => { M.clock(p, 8, 8, 6); M.eye(p, 8, 8, 'r'); },
+  regular: p => { M.cue(p, 1, 14, 12, 3); p.rect(10, 9, 5, 6, 'n'); p.rect(11, 10, 3, 1, 'l'); },
+  rajis_found: p => { p.ring(8, 8, 6, 'g'); p.line(8, 8, 13, 5, 'g'); p.set(10, 11, 'r'); p.set(5, 5, 'g'); },
+  intercepted: p => ART.p_missile(p),
+  supply_chain: p => ART.p_supply(p),
+  machine_learning: p => ART.car(p),
+  heavy_industry: p => { p.rect(2, 8, 12, 4, 'n'); p.rect(5, 5, 6, 3, 'n'); p.line(10, 6, 15, 4, 's', 1); for (let i = 0; i < 5; i++) p.disc(3 + i * 2.5, 13, 1, 'k', false); },
+  system_online: p => { p.disc(8, 8, 6, 'r'); M.eye(p, 8, 8, 'y'); },
+  paulyamin: p => { M.ball(p, 5, 8, 3, 's'); M.ball(p, 11, 8, 3, 's'); p.set(5, 8, 'r'); p.set(11, 8, 'r'); p.line(8, 2, 8, 14, 'd'); },
 };
+
+// RAJIS portraits: 16px helmets and visors, nobody real
+export const PORTRAIT = {
+  richard: p => { p.disc(8, 9, 5, 'l'); p.rect(3, 3, 10, 4, 'G'); p.rect(3, 6, 10, 1, 'k'); p.rect(6, 9, 1, 1, 'k'); p.rect(10, 9, 1, 1, 'k'); p.rect(7, 12, 3, 1, 'N'); M.p_missileBadge(p); },
+  neil: p => { p.disc(8, 9, 5, 'l'); p.rect(3, 4, 10, 3, 'N'); p.ring(8, 8, 6, 'd'); p.rect(2, 7, 2, 4, 's'); p.line(3, 11, 6, 13, 's'); p.rect(6, 9, 1, 1, 'k'); p.rect(10, 9, 1, 1, 'k'); },
+  paul: p => { p.disc(8, 9, 5, 'S'); p.rect(4, 7, 9, 3, 'k'); p.rect(5, 8, 7, 1, 'c'); p.rect(7, 2, 2, 3, 's'); p.set(8, 1, 'r'); p.rect(6, 12, 5, 1, 'd'); },
+  yahya: p => { p.disc(8, 9, 5, 'l'); p.rect(2, 3, 12, 4, 'G'); p.rect(3, 2, 10, 1, 'G'); p.rect(4, 7, 8, 2, 'k'); p.rect(5, 7, 2, 1, 'y'); p.rect(9, 7, 2, 1, 'y'); p.rect(7, 12, 3, 1, 'N'); },
+  core: p => { p.disc(8, 8, 7, 'R'); p.disc(8, 8, 5, 'r'); M.eye(p, 8, 8, 'y'); },
+  paulyamin: p => { p.disc(5, 9, 4, 'S'); p.disc(11, 9, 4, 's'); p.rect(3, 8, 4, 1, 'c'); p.rect(9, 8, 4, 1, 'r'); },
+};
+M.p_missileBadge = (p) => { p.set(13, 13, 'r'); p.set(14, 12, 'r'); p.set(12, 14, 'y'); };
 
 // UI glyphs (replace fallback-font symbols like ★ ♥ ⚠ ▶)
 const GLYPH = {
@@ -282,6 +350,17 @@ const GLYPH = {
   target: p => { p.ring(8, 8, 6, 'r'); p.ring(8, 8, 3, 'w'); p.set(8, 8, 'r'); },
   anomaly: p => { p.disc(8, 8, 6, 'P'); M.eye(p, 8, 8, 'c'); },
   dice: p => { p.rect(3, 3, 10, 10, 'w'); p.rect(3, 12, 10, 1, 'S'); [[5, 5], [10, 5], [8, 8], [5, 10], [10, 10]].forEach(([x, y]) => p.set(x, y, 'k')); },
+  contract: p => { p.rect(4, 2, 9, 12, 'l'); for (let y = 5; y < 12; y += 2) p.rect(6, y, 5, 1, 'N'); p.line(9, 13, 13, 9, 'b'); },
+  state: p => { M.moon(p, 8, 8, 5); },
+  rival: p => { M.cue(p, 1, 14, 7, 4); M.cue(p, 14, 14, 9, 4); },
+  puzzle: p => { M.wall(p, 0, 0, 2, 16, 'g'); p.line(3, 14, 13, 2, 'y'); M.ball(p, 13, 2, 1, 'y', { dot: false }); },
+  roller: p => { M.chip(p, 6, 10, 4); M.chip(p, 10, 6, 4); },
+  car: p => ART.car(p),
+  syn: p => { M.ball(p, 5, 8, 3, 'c'); M.ball(p, 11, 8, 3, 'm'); M.sparkle(p, 8, 3, 'y'); },
+  heartOn: p => M.heart(p, 4, 5, 'r'),
+  radar: p => ART.p_radar(p),
+  over: p => M.bolt(p, 5, 4, 'c'),
+  lamp: p => { p.rect(5, 2, 6, 4, 'y'); p.rect(7, 6, 2, 8, 's'); p.rect(4, 14, 8, 1, 's'); },
 };
 
 // ---------------------------------------------------------------- render
@@ -387,6 +466,10 @@ export function achIcon(id, got = true) {
     if (!got) p.a = p.a.map(c => c ? (c === 'k' ? 'k' : 'd') : null);
     return drawPix(p, { frame: got ? '#ffc21c' : '#3a3450' });
   });
+}
+export function portraitIcon(id) {
+  const fn = PORTRAIT[id] || (p => M.skull(p, 4, 4));
+  return cached(`p:${id}`, () => drawPix(paintMap(fn), { frame: '#8fd14f' }));
 }
 export function glyph(name) {
   return cached(`g:${name}`, () => drawPix(paintMap(GLYPH[name] || GLYPH.star), { bg: false }));

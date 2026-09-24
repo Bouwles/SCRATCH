@@ -21,6 +21,10 @@ import { themeById, ballSkinById, cueSkinById } from './cosmetics.js';
 import { UI } from '../ui/UI.js';
 import { ShotMixin } from './shot.js';
 import { RunMixin, makeHoming, makeOrbit } from './run.js';
+import { AfterMixin, patchRelicsForSynergies } from './after.js';
+import { RajisMixin } from './rajis.js';
+import { setRelicGate } from './relics.js';
+import { ReplayMixin } from '../ui/AfterUI.js';
 import { Classic } from '../classic/Classic.js';
 import { toClassic, toRogue } from '../classic/transition.js';
 
@@ -85,6 +89,9 @@ export class Game {
     this.orbitForce = makeOrbit(this);
     this.armed = {};
 
+    // risk relics wait until the save has won once (Daily Scratch gets everything)
+    setRelicGate((r) => !r.risk || this.gate('newtables'));
+    patchRelicsForSynergies(this);
     this.applyCosmetics();
     this.applySettings();
     this.ui = new UI(this);
@@ -169,13 +176,18 @@ export class Game {
   }
 
   setTheme(theme) {
-    if (this.theme === theme) return;
+    const flags = this.menuFlags ? this.menuFlags() : {};
+    const sig = JSON.stringify(flags);
+    if (this.theme === theme && this.flagSig === sig) return;
+    this.flagSig = sig;
     this.theme = theme;
     this.table.build(theme);
+    this.room.flags = flags;
     this.room.build(theme, this.liveRT.texture);
     shared.uEnvMap.value?.dispose();
     shared.uEnvMap.value = envTexture(theme);
     shared.uAmbient.value.setRGB(...theme.ambient);
+    this.ambSet = 1;
     shared.uSky.value.setRGB(...theme.skyC);
     shared.uGround.value.setRGB(...theme.ground);
     shared.uFogColor.value.setRGB(...theme.fog);
@@ -274,6 +286,7 @@ export class Game {
     if (inPlay) {
       if (code === 'KeyR') { this.spin.x = 0; this.spin.y = 0; }
       if (code === 'KeyG') this.toggleGhost();
+      if (code === 'KeyB') this.bookieAccept();
       if (code === 'Digit1') this.useItem(0);
       if (code === 'Digit2') this.useItem(1);
       if (code === 'Digit3') this.useItem(2);
@@ -379,7 +392,7 @@ export class Game {
 
     const classic = this.mode === 'classic';
     if (!this.ui.pauseOpen && !(classic && this.classic.paused)) this.updateState(realDt, simDt);
-    if (this.run && !this.ui.pauseOpen && ['aim', 'charge', 'shooting', 'sim', 'place', 'house', 'houseWait'].includes(this.state)) this.run.time += realDt;
+    if (this.run && !this.ui.pauseOpen && ['aim', 'charge', 'shooting', 'sim', 'place', 'house', 'houseWait', 'enemy'].includes(this.state)) this.run.time += realDt;
     if (this.enc?.feverXL && !this.ui.pauseOpen) this.physics.pockets.forEach((p, i) => { if (p.open) p.scale = 1.4 + Math.sin(this.time * 1.3 + i * 1.7) * 0.8; });
 
     // timers
@@ -388,12 +401,14 @@ export class Game {
       tm.t -= tm.real ? realDt : simDt;
       if (tm.t <= 0) { this.timers.splice(i, 1); tm.fn(); }
     }
+    if (this.carRun && !this.ui.pauseOpen) this.carRun(this.time);
+    if (this.replayTick) this.replayTick(realDt);
 
     // physics: fixed 1/240 s steps so results never depend on frame rate
     if (simDt > 0) {
       const H = 1 / 240;
       this.physAcc = Math.min(0.25, (this.physAcc || 0) + simDt);
-      while (this.physAcc >= H) { this.physics.step(H); this.physAcc -= H; }
+      while (this.physAcc >= H) { if (!this.replaying) this.physics.step(H); this.physAcc -= H; }
       if (this.state === 'sim' || this.state === 'house') (classic ? this.classic.simTick(simDt) : this.simTick(simDt));
     }
 
@@ -418,14 +433,36 @@ export class Game {
 
   updateLighting(dt, t) {
     const L = this.lights;
-    const target = this.blackout ? 0.18 : (this.lampTarget ?? 1);
+    const target = this.blackout === 'deep' ? 0.06 : this.blackout ? 0.18 : (this.lampTarget ?? 1);
     L.lampMul = damp(L.lampMul, target, this.mode === 'classic' ? 1.2 : 3, dt);
-    L.accentMul = damp(L.accentMul, this.blackout ? 0.4 : (this.accentTarget ?? 1), this.mode === 'classic' ? 1.2 : 3, dt);
+    // table damage: the room's lights stutter after a big hit
+    this.flicker = Math.max(0, (this.flicker || 0) - dt * 0.9);
+    const fl = this.flicker > 0 && Math.sin(t * 41) * Math.sin(t * 17.3) > 0.2 ? 1 - this.flicker : 1;
+    L.accentMul = damp(L.accentMul, (this.blackout === 'deep' ? 0.12 : this.blackout ? 0.4 : (this.accentTarget ?? 1)) * fl, this.mode === 'classic' ? 1.2 : 3, dt);
+    if (this.glitchDecay) { this.renderer.fx.glitch = Math.max(0, this.renderer.fx.glitch - dt * 0.8); if (!this.renderer.fx.glitch) this.glitchDecay = false; }
     if (this.blackout && this.physics.cue && this.physics.cue.state === 'table') {
       const c = this.physics.cue;
       const p = this.worldPos(c.x, c.z, 0.35);
       L.set(9, p, 0xfff0d0, 0.9, 1.3);
     }
+    // THE OWNER, phase III: one light in the room, over the only ball that counts
+    const lit = this.enc?.litBall;
+    if (lit && lit.state === 'table' && !this.enc.done) L.set(8, this.worldPos(lit.x, lit.z, 0.3), 0xf0e6c8, 0.7, 1.6);
+    else if (this.litOn) L.clear(8);
+    this.litOn = !!(lit && lit.state === 'table');
+    // a real power cut takes the room's ambient light with it
+    const amb = this.mode !== 'classic' && this.blackout === 'deep' ? 0.25 : 1;
+    this.ambK = damp(this.ambK ?? 1, amb, 2.5, dt);
+    if (this.theme && this.mode !== 'classic' && Math.abs(this.ambK - (this.ambSet ?? 1)) > 0.004) {
+      this.ambSet = this.ambK;
+      const k = this.ambK, T = this.theme;
+      shared.uAmbient.value.setRGB(T.ambient[0] * k, T.ambient[1] * k, T.ambient[2] * k);
+      shared.uSky.value.setRGB(T.skyC[0] * k, T.skyC[1] * k, T.skyC[2] * k);
+      shared.uGround.value.setRGB(T.ground[0] * k, T.ground[1] * k, T.ground[2] * k);
+    }
+    // in the dark, the balls glow a little (BLACKOUT)
+    this.ballView.glow = damp(this.ballView.glow || 0, this.blackout && this.enc?.tstate?.id === 'blackout' ? 0.35 : 0, 3, dt);
+    this.room.clockText = this.meta.data.afterhours?.found ? '03:77' : null;
     // void boss swirl on screen
     const vp = this.physics.pockets.find(p => p.gravity > 0 && p.open);
     if (vp) {
@@ -582,7 +619,7 @@ export class Game {
       }
       const early8 = pred.type === 'ball' && pred.ball.num === 8 && pred.ball.kind === 'object' && this.enc && !this.enc.def.classic && this.enc.progress < this.enc.goal - 1;
       const forbid = pred.type === 'ball' && pred.ball.tags.forbidden;
-      this.aim.level = this.enc?.challenge?.id === 'noguide' || this.enc?.stake?.id === 'noguide' ? 'none' : (this.meta.s.aim || 'full');
+      this.aim.level = this.enc?.challenge?.id === 'noguide' || this.enc?.stake?.id === 'noguide' || this.hasRelic('blind_faith') || this.run?.hand?.includes('noguide') ? 'none' : (this.meta.s.aim || 'full');
       // laser sight / bank tables: preview the object ball's first cushion rebound
       let bank = null;
       if (pred.type === 'ball' && (this.aim.extend > 1 || this.enc?.def.id === 'bank')) {
@@ -646,12 +683,16 @@ export class Game {
   }
 
   quitToMenu() {
+    const rajis = this.run?.mode === 'rajis';
     this.enc?.anomaly?.cleanup?.(this);
     this.renderer.mirror = false;
     this.timers = [];
+    this.carRun = null; this.cyberCar?.hide();
+    this.stateWorld?.(null, false);
     this.run = null; this.enc = null; this.shot = null;
     this.ui.closeAll();
     this.toMenu();
+    if (rajis) this.ui.showRajisMenu();
   }
 
   displayAngle() {
@@ -745,4 +786,4 @@ export class Game {
   }
 }
 
-Object.assign(Game.prototype, ShotMixin, RunMixin);
+Object.assign(Game.prototype, ShotMixin, RunMixin, AfterMixin, RajisMixin, ReplayMixin);

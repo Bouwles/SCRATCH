@@ -3,8 +3,33 @@
 
 import * as THREE from 'three';
 import { particleMaterial, ps1Material } from '../render/materials.js';
+import { canvas, toTex, rng } from '../render/textures.js';
 
 const MAXP = 3000;
+const MAX_SCARS = 24;
+
+// scorch marks and cracks left on the felt by the loudest moments
+let scorchTex = null, crackTex = null;
+function scarTextures() {
+  if (scorchTex) return;
+  const a = canvas(32, 32), x = a.getContext('2d');
+  const g = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+  g.addColorStop(0, 'rgba(0,0,0,0.75)'); g.addColorStop(0.55, 'rgba(10,4,0,0.45)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(0, 0, 32, 32);
+  const r = rng(5);
+  for (let i = 0; i < 40; i++) { x.fillStyle = `rgba(0,0,0,${0.2 + r() * 0.4})`; const ang = r() * 6.28, d = r() * 14; x.fillRect(16 + Math.cos(ang) * d, 16 + Math.sin(ang) * d, 1, 1); }
+  scorchTex = toTex(a, { wrap: false });
+  const c = canvas(32, 32), y = c.getContext('2d');
+  y.strokeStyle = 'rgba(0,0,0,0.8)'; y.lineWidth = 1;
+  const q = rng(9);
+  for (let k = 0; k < 5; k++) {
+    y.beginPath(); let px = 16, pz = 16; y.moveTo(px, pz);
+    const ang = k * 1.25 + q();
+    for (let j = 0; j < 5; j++) { px += Math.cos(ang + (q() - 0.5)) * 3.2; pz += Math.sin(ang + (q() - 0.5)) * 3.2; y.lineTo(px, pz); }
+    y.stroke();
+  }
+  crackTex = toTex(c, { wrap: false });
+}
 
 export class FX {
   constructor(parent) {
@@ -33,6 +58,37 @@ export class FX {
     // --- trails
     this.trails = new Map();
     this.density = 1;       // particle setting multiplier
+    // --- scars (reset between tables)
+    this.scars = [];
+    this.scarGeo = new THREE.PlaneGeometry(1, 1);
+    this.scarGeo.rotateX(-Math.PI / 2);
+  }
+
+  scar(x, z, kind = 'scorch', r = 0.12) {
+    if (Math.abs(x) > 1 || Math.abs(z) > 0.5) return;
+    scarTextures();
+    const m = new THREE.Mesh(this.scarGeo, ps1Material({ map: kind === 'crack' ? crackTex : scorchTex, transparent: true, depthWrite: false, fog: 0.6 }));
+    m.position.set(x, 0.0012 + this.scars.length * 0.00002, z);
+    m.rotation.y = Math.random() * 6.28;
+    m.scale.setScalar(Math.max(0.05, r * 2));
+    m.renderOrder = 1;
+    this.root.add(m);
+    this.scars.push(m);
+    if (this.scars.length > MAX_SCARS) { const old = this.scars.shift(); this.root.remove(old); old.material.dispose(); }
+  }
+
+  clearScars() {
+    for (const m of this.scars) { this.root.remove(m); m.material.dispose(); }
+    this.scars = [];
+  }
+
+  // dust shaken down from the ceiling onto the table
+  dust(x = 0, z = 0, n = 16) {
+    n = Math.max(1, Math.round(n * this.density));
+    for (let k = 0; k < n; k++) {
+      const px = x + (Math.random() - 0.5) * 1.6, pz = z + (Math.random() - 0.5) * 0.9;
+      this.spawn(px, 0.9 + Math.random() * 0.5, pz, (Math.random() - 0.5) * 0.05, -0.1, (Math.random() - 0.5) * 0.05, Math.random() < 0.5 ? 0x9a9488 : 0x6a655c, 1.6 + Math.random(), 1, { grav: 0.35, drag: 2.5 });
+    }
   }
 
   spawn(x, y, z, vx, vy, vz, color, life = 0.6, size = 2, opts = {}) {

@@ -257,6 +257,7 @@ const POSTERS = [
   { t: 'CUE\nMASTER', s: 'VOL.2', bg: ['#7cff5a', '#08300a'], fg: '#08300a' },
   { t: 'EIGHT\nIS LAST', s: 'ハスラー', bg: ['#b36bff', '#1a0540'], fg: '#ffffff' },
   { t: 'CHALK\nUP!', s: 'ZERO CRASH', bg: ['#ff6a1f', '#3a0a00'], fg: '#fff2c0' },
+  { t: 'HOUSE\nCHAMPION', s: 'YOU. APPARENTLY', bg: ['#ffd040', '#402a00'], fg: '#1a0c00' },
 ];
 
 export function posterTexture(i) {
@@ -342,10 +343,38 @@ export function cityTexture(theme, seed = 21) {
       x.fillRect(bx, 40 + r() * 24, 2 + r() * 4, 64);
     }
   }
+  // RAJIS locations: what is outside the command room today
+  if (theme.view === 'pines') {
+    for (let i = 0; i < 26; i++) {
+      const tx = r() * 128, th = 10 + r() * 22;
+      x.fillStyle = '#0a1a14';
+      for (let k = 0; k < th; k += 2) x.fillRect(tx - (th - k) * 0.25, 64 - k - 4, (th - k) * 0.5, 2);
+    }
+    x.fillStyle = '#c8d8e8'; x.fillRect(0, 58, 128, 6);
+    return toTex(c, { wrap: false });
+  }
+  if (theme.view === 'road') {
+    x.fillStyle = '#3a2a14'; x.fillRect(0, 40, 128, 24);
+    x.fillStyle = '#1a1410'; x.beginPath(); x.moveTo(50, 64); x.lineTo(62, 40); x.lineTo(66, 40); x.lineTo(90, 64); x.fill();
+    x.fillStyle = '#f5c542'; for (let y = 42; y < 64; y += 5) x.fillRect(63 + (y - 40) * 0.12, y, 1, 2);
+    for (let i = 0; i < 3; i++) { x.fillStyle = '#2a2e20'; x.fillRect(60 - i * 2, 44 + i * 6, 6 + i * 2, 3 + i); x.fillStyle = '#ffd98a'; x.fillRect(60 - i * 2, 46 + i * 7, 1, 1); }
+    return toTex(c, { wrap: false });
+  }
+  if (theme.view === 'towers') {
+    x.fillStyle = theme.building;
+    x.fillRect(60, 2, 4, 62); x.fillRect(57, 20, 10, 44); x.fillRect(54, 36, 16, 28);
+    x.fillStyle = '#ffd98a'; for (let y = 6; y < 62; y += 3) if (r() > 0.4) x.fillRect(61, y, 1, 1);
+  }
+  if (theme.view === 'coast') {
+    x.fillStyle = '#0c1430'; x.fillRect(0, 50, 128, 14);
+    x.fillStyle = 'rgba(255,220,160,0.25)'; for (let i = 0; i < 20; i++) x.fillRect(r() * 128, 52 + r() * 10, 3, 1);
+  }
   // skyline
   let bx = 0;
+  const maxH = theme.view === 'coast' ? 22 : theme.view === 'towers' ? 26 : 36;
   while (bx < 128) {
-    const bw = 8 + (r() * 14 | 0), bh = 16 + (r() * 36 | 0);
+    if (theme.view === 'towers' && bx > 50 && bx < 72) { bx += 4; continue; }
+    const bw = 8 + (r() * 14 | 0), bh = 16 + (r() * maxH | 0);
     x.fillStyle = theme.building;
     x.fillRect(bx, 64 - bh, bw, bh);
     for (let wy = 64 - bh + 3; wy < 62; wy += 4) for (let wx = bx + 2; wx < bx + bw - 2; wx += 3) {
@@ -488,6 +517,26 @@ export function animatedScreen(kind, seed = 1) {
       x.fillRect(bx | 0, by | 0, 2, 2);
       x.fillRect(1, (by - 3) | 0, 1, 6); x.fillRect(W - 2, (by - 3 + Math.sin(t) * 2) | 0, 1, 6);
       for (let y = 0; y < H; y += 3) x.fillRect(W / 2, y, 1, 1);
+    } else if (kind === 'radar') {
+      x.fillStyle = '#020a02'; x.fillRect(0, 0, W, H);
+      x.strokeStyle = '#1a4a10';
+      for (const rr of [4, 8, 11]) { x.beginPath(); x.arc(W / 2, H / 2, rr, 0, 7); x.stroke(); }
+      x.fillRect(W / 2, 0, 1, H); x.fillRect(0, H / 2, W, 1);
+      const a = t * 2.2;
+      x.strokeStyle = '#8fd14f'; x.beginPath(); x.moveTo(W / 2, H / 2); x.lineTo(W / 2 + Math.cos(a) * 12, H / 2 + Math.sin(a) * 12); x.stroke();
+      for (const s0 of stars.slice(0, 5)) {
+        const ba = Math.atan2(s0[1] - H / 2, s0[0] - W / 2), da = ((a - ba) % 6.283 + 6.283) % 6.283;
+        if (Math.hypot(s0[0] - W / 2, s0[1] - H / 2) < 11 && da < 1.2) { x.fillStyle = da < 0.3 ? '#d0ff90' : '#4a8a28'; x.fillRect(s0[0] | 0, s0[1] | 0, 2, 1); }
+      }
+    } else if (kind === 'map') {
+      x.fillStyle = '#041008'; x.fillRect(0, 0, W, H);
+      x.fillStyle = '#1a3a14';
+      for (const s0 of stars) x.fillRect(s0[0] | 0, s0[1] | 0, 3 + (s0[2] * 3 | 0), 2);
+      x.strokeStyle = '#2a5a1c'; for (let i = 0; i < W; i += 8) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, H); x.stroke(); }
+      const k = (t * 0.4) % 1;
+      x.fillStyle = frame % 8 < 4 ? '#ff3b30' : '#6a1008';
+      x.fillRect(4 + k * (W - 10), 6 + Math.sin(k * 6) * 5 + 6, 2, 2);
+      x.fillStyle = '#f5c542'; x.fillRect(W - 6, 4, 2, 2);
     } else if (kind === 'fish') {
       x.fillStyle = '#021a2a'; x.fillRect(0, 0, W, H);
       x.fillStyle = '#ffa030';

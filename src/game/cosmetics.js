@@ -82,6 +82,36 @@ export const THEMES = [
     windows: 'none', props: 'void',
     grade: { lift: [0.02, 0.0, 0.05], gain: [1.0, 0.98, 1.1], sat: 1.2 },
   },
+  {
+    id: 'afterhours', name: 'CLOSING TIME', desc: 'Chairs up on the tables, one lamp still on, and a clock that says 03:77.',
+    unlock: { ach: 'last_game' },
+    felt: '#0f5a34', cushion: '#0b4428', wood: ['#3a1a0a', '#140602'], metal: '#a09060',
+    carpet: ['#120a18', '#5a2040', '#1a6070', '#806020'], seed: 77,
+    wall: ['#16101e', '#221a30', '#2a120a'],
+    sky: ['#04040c', '#141028'], building: '#040308',
+    neon: ['#6a2050', '#1a5a66', '#6a5a1a'],
+    env: ['#100c1c', '#1c1430', '#201018'], lamp: '#ffe0b0', felt2: '#0f5a34',
+    lampColor: [1.2, 0.95, 0.7], ambient: [0.02, 0.015, 0.03], skyC: [0.05, 0.04, 0.08], ground: [0.01, 0.01, 0.015],
+    fog: [0.012, 0.008, 0.025], fogNear: 2.4, fogFar: 8.5,
+    signs: [['CLOSED', '#ff3b5c'], ['03:77', '#f0e6c8'], ['閉店', '#6a5cff']],
+    windows: 'rain', props: 'afterhours',
+    grade: { lift: [0.01, 0.0, 0.03], gain: [1.0, 0.96, 1.02], sat: 0.95 },
+  },
+  {
+    id: 'command', name: 'COMMAND', desc: 'Radar screens, warning lights and a map table that is also a pool table.',
+    unlock: { ach: 'system_online' }, rajis: true,
+    felt: '#34401e', cushion: '#262f14', wood: ['#23261c', '#08090a'], metal: '#8fd14f',
+    carpet: ['#0a0c08', '#1a2210', '#2a3418', '#3a2a0a'], seed: 131,
+    wall: ['#1c211a', '#2a3024', '#3a3a2a'],
+    sky: ['#020a04', '#0a2410'], building: '#010502',
+    neon: ['#8fd14f', '#ff3b30', '#f5c542'],
+    env: ['#0a140a', '#1a2a14', '#141a10'], lamp: '#e8ffd8', felt2: '#34401e',
+    lampColor: [1.0, 1.15, 0.85], ambient: [0.02, 0.045, 0.02], skyC: [0.03, 0.08, 0.03], ground: [0.01, 0.02, 0.01],
+    fog: [0.01, 0.03, 0.012], fogNear: 3.2, fogFar: 10,
+    signs: [['RAJIS', '#8fd14f'], ['DEFCON 3', '#ff3b30'], ['司令部', '#f5c542']],
+    windows: 'none', props: 'rajis', view: 'screens',
+    grade: { lift: [0.0, 0.03, 0.0], gain: [0.98, 1.06, 0.95], sat: 1.05 },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -269,6 +299,41 @@ export const BALL_SKINS = [
     tex: { color: n => n === 0 ? '#f4f0e6' : '#101014', white: '#f4f0e6', numBg: '#f4f0e6', numFg: '#101014' },
     mat: { reflect: 0.3, spec: 1.4, rim: 0x7060ff, rimAmt: 0.5 }, trail: '#7060ff',
   },
+  {
+    id: 'alchemy', name: 'ALCHEMY', desc: 'Swirled metals that never quite settle. For finding five hidden synergies.', unlock: { ach: 'synergist' },
+    tex: {
+      color: n => n === 0 ? '#f0f4ff' : n === 8 ? '#141018' : ['#c08a30', '#6ab0c0', '#b04a6a', '#80a040', '#a060c0', '#d0a050', '#4a8aa0'][(n - 1) % 7],
+      white: '#e8e0d0', numBg: '#201810', numFg: '#ffe0a0',
+      pattern: (x, W, H, n) => {
+        const r = rng(n * 19 + 7);
+        x.globalAlpha = 0.5;
+        for (let i = 0; i < 10; i++) { x.strokeStyle = r() > 0.5 ? '#ffe8a0' : '#40ffe0'; x.beginPath(); x.arc(r() * W, r() * H, 3 + r() * 10, 0, 3 + r() * 3); x.stroke(); }
+        x.globalAlpha = 1;
+      },
+    },
+    mat: { reflect: 0.55, spec: 1.6, rim: 0x40ffe0, rimAmt: 0.6, fx: 1 }, trail: '#40ffe0',
+  },
+  // ---- (these stay out of every list until their mode is found)
+  {
+    id: 'radar', name: 'RADAR', desc: 'Green phosphor targets with a sweep line that never stops.', unlock: { ach: 'supply_chain' }, rajis: true,
+    tex: {
+      color: n => n === 0 ? '#e8ffe0' : n === 8 ? '#041004' : '#0c2a0c', white: '#081808', numBg: '#8fd14f', numFg: '#041004',
+      pattern: (x, W, H) => { x.strokeStyle = 'rgba(143,209,79,0.8)'; for (let i = 0; i < 3; i++) { x.beginPath(); x.arc(W * 0.25, H / 2, 4 + i * 5, 0, 7); x.stroke(); } x.fillStyle = 'rgba(143,209,79,0.6)'; x.fillRect(W * 0.25, H / 2 - 1, 14, 2); },
+    },
+    mat: { emissive: 0x8fd14f, emissiveAmt: 0.45, rim: 0x8fd14f, rimAmt: 0.7, reflect: 0.2, fx: 2 }, trail: '#8fd14f',
+  },
+  {
+    id: 'robot', name: 'ROBOT', desc: 'Brushed steel with one red eye. Two of a kind.', unlock: { ach: 'paulyamin' }, rajis: true,
+    tex: {
+      color: n => n === 0 ? '#e0e4ec' : '#8a909c', white: '#c0c4cc', numbers: false, cueDot: false,
+      pattern: (x, W, H, n) => {
+        x.fillStyle = '#50545c'; for (let i = 0; i < W; i += 8) x.fillRect(i, 0, 1, H);
+        x.fillStyle = n === 0 ? '#2bf0ff' : '#ff2020'; x.fillRect(W * 0.25 - 4, H / 2 - 2, 8, 4);
+        x.fillStyle = '#ffffff'; x.fillRect(W * 0.25 - 3, H / 2 - 1, 2, 1);
+      },
+    },
+    mat: { reflect: 0.7, spec: 1.8, rim: 0xff2020, rimAmt: 0.4, bands: 5 }, trail: '#ff2020',
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -407,6 +472,59 @@ export const CUE_SKINS = [
     mat: { emissive: 0.45 }, trail: { color: '#ffd040', kind: 'spark' },
   },
 ];
+
+CUE_SKINS.push(
+  {
+    id: 'fineprint', name: 'THE FINE PRINT', desc: 'Covered in tiny clauses nobody reads. For five completed contracts.', unlock: { ach: 'contractor' },
+    paint: (x, w, h) => {
+      band(x, w, 0, h, '#f0ead8');
+      const r = rng(21);
+      x.fillStyle = '#3a3428';
+      for (let y = 4; y < h - 12; y += 3) for (let i = 1; i < w - 1; i += 2) if (r() > 0.35) x.fillRect(i, y, 1, 1);
+      band(x, w, 96, 6, '#1a1408');
+      tip(x, w, h, '#fff8e8', '#1a1408');
+    },
+  },
+  {
+    id: 'grudge', name: 'GRUDGE', desc: 'Scratched with a tally of every loss. For beating your Nemesis.', unlock: { ach: 'nemesis' },
+    paint: (x, w, h) => {
+      band(x, w, 0, h, '#180808');
+      x.fillStyle = '#c02020';
+      for (let y = 10; y < h - 20; y += 12) { for (let i = 0; i < 4; i++) x.fillRect(2 + i * 3, y, 1, 7); x.fillRect(1, y + 3, 12, 1); }
+      tip(x, w, h, '#e8d8c8', '#c02020');
+    },
+    mat: { emissive: 0.2 }, trail: { color: '#c02020', kind: 'spark' },
+  },
+  {
+    id: 'missile', name: 'MISSILE', desc: 'Stencilled, finned and very much not regulation.', unlock: { ach: 'intercepted' }, rajis: true,
+    paint: (x, w, h) => {
+      band(x, w, 0, h, '#e8e8e0');
+      band(x, w, 0, 18, '#303830');
+      for (let y = 30; y < h - 30; y += 40) { band(x, w, y, 3, '#c02020'); }
+      x.fillStyle = '#303830'; x.font = '6px monospace'; x.fillRect(w / 2 - 2, 60, 4, 30);
+      tip(x, w, h, '#c02020', '#c02020');
+    },
+    mat: { emissive: 0.15 }, trail: { color: '#ff3b30', kind: 'fire' },
+  },
+  {
+    id: 'cyberbullet', name: 'CYBER BULLET', desc: 'Grey paint, a racing stripe and two red tail lights on the butt.', unlock: { ach: 'machine_learning' }, rajis: true,
+    paint: (x, w, h) => {
+      for (let i = 0; i < w; i++) { const v = 110 + Math.sin(i / w * Math.PI * 2) * 40; x.fillStyle = `rgb(${v},${v + 4},${v + 10})`; x.fillRect(i, 0, 1, h); }
+      band(x, w, 0, 4, '#ff2020');
+      x.fillStyle = '#e8ecf0'; x.fillRect(w / 2 - 1, 8, 2, h - 30);
+      tip(x, w, h, '#e8ecf0', '#2a2e36');
+    },
+    mat: { emissive: 0.25 }, trail: { color: '#c8ccd8', kind: 'spark' },
+  },
+  {
+    id: 'stripe', name: 'WARNING STRIPE', desc: 'Black and yellow all the way down. Heavy machinery.', unlock: { ach: 'heavy_industry' }, rajis: true,
+    paint: (x, w, h) => {
+      for (let y = 0; y < h - 10; y += 2) { const k = Math.floor((y / 2) / 4) % 2; x.fillStyle = k ? '#f5c542' : '#141414'; x.fillRect(0, y, w, 2); }
+      tip(x, w, h, '#f5c542', '#141414');
+    },
+    mat: { emissive: 0.15 }, trail: { color: '#f5c542', kind: 'spark' },
+  },
+);
 
 // tag each cosmetic with its kind so unlock keys never collide (e.g. chrome balls vs chrome cue)
 THEMES.forEach(t => { t.kind = 'theme'; });

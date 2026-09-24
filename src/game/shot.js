@@ -25,13 +25,18 @@ export const ShotMixin = {
     if (!this.run) return;
     const S = this.shot;
     const sig = () => S ? `${S.lines.length}|${S.chips}|${S.mult}|${S.multX}|${S.speed}|${S.explosions}|${S.angle}|${S.spinMul}|${S.doubleTap}` : '';
+    this.synPre(name, ...args);
     for (const r of this.run.relics) {
-      if (!r[name]) continue;
+      if (!r[name] || this.relicOff(r.id)) continue;
       const before = sig();
       r[name](this, ...args);
       if (S && sig() !== before && !['mods', 'pockets'].includes(name)) this.ui.pulseRelic(r.id);
     }
     if (this.chaosRule && this.chaosRule[name] && ['shotStart', 'shotEnd'].includes(name)) this.chaosRule[name](this, ...args);
+    if (name === 'shotStart' || name === 'pot') this.stateHook(name, ...args);
+    this.synPost(name, ...args);
+    this.overHook(name, ...args);
+    if (name === 'shotStart') this.handicapApply(S);
   },
 
   // ----------------------------------------------------------- firing
@@ -44,6 +49,7 @@ export const ShotMixin = {
     S.speed = PHYS.minShotSpeed + (PHYS.maxShotSpeed - PHYS.minShotSpeed) * Math.pow(S.power, 1.55);
     S.side = this.spin.x; S.top = this.spin.y;
     S.isBreak = e && e.shotsTaken === 0 && e.layout === 'triangle';
+    S.quick = this.time - (this.aimStart ?? this.time) < 4;
     if (this.armed?.nuke) { S.nuke = true; this.armed.nuke = false; }
     if (this.armed?.big) { S.bigPockets = true; this.armed.big = false; }
     if (this.armed?.guide) this.armed.guide = false;
@@ -171,6 +177,8 @@ export const ShotMixin = {
     const S = this.shot;
     if (!S) return;
     S.simTime += dt;
+    S.recAcc = (S.recAcc || 0) + dt;
+    if (S.recAcc >= 1 / 30) { S.recAcc = 0; this.recTick(S); }
     if (this.blackHole) {
       this.blackHole.t -= dt;
       const p = this.physics.pockets[this.blackHole.i];
@@ -225,6 +233,7 @@ export const ShotMixin = {
         this.ballView.flash(cueHit, 0.6);
       }
       if (!S.house) this.relicHook('ballHit', S, a, b, rel);
+      this.enc?.def.onBallHit?.(this, a, b, rel);
       if (rel > 0.9) {
         const n = Math.min(14, Math.floor(rel * 3));
         this.fx.burst(x, 0.035, z, [0xffffff, 0xfff0a0], n, 0.4 + rel * 0.25, { life: 0.25, size: 1, grav: 2 });
@@ -248,6 +257,7 @@ export const ShotMixin = {
       this.shake(0.3);
       this.ui.worldPop('SPAT OUT!', this.worldPos(b.x, b.z, 0.1), '#ff3040');
     } else if (type === 'ghost') {
+      if (S) S.ghosted = true;
       this.meta.achieve('ghost') && this.ui.achievement(this.meta.data, 'ghost');
       this.fx.burst(a.x, 0.03, a.z, [0xffffff, 0xa0e0ff], 20, 0.8, { life: 0.5 });
       this.audio.tone(900, { type: 'sine', dur: 0.4, vol: 0.12, slide: 300, verb: 0.6 });
@@ -262,6 +272,7 @@ export const ShotMixin = {
         this.lights.flash(this.worldPos(o.x, o.z, 0.2), 0xff2bd6, 1.0, 1.5, 0.2);
         if (S && !S.house) { S.bumpers++; S.lines.push(['BUMPER', 150]); this.ui.worldPop('+150', this.worldPos(o.x, o.z, 0.1), '#ff2bd6'); }
       } else {
+        if (o.wall) ball.walled = true;
         this.audio.rail(sp * 1.2, ball.x);
         this.fx.burst(ball.x, 0.03, ball.z, 0x808090, 6, 0.4, { life: 0.3 });
       }
@@ -326,6 +337,8 @@ export const ShotMixin = {
       this.meta.stat('golds').forEach(a => this.ui.achievement(this.meta.data, a.id));
     }
     this.relicHook('pot', S, pot);
+    if (counted) this.contractEvent('pot', pot);
+    if (b.walled && counted) S.lines.push(['ARCHITECTURE', 300]);
     if (b.kind === 'bonus') { S.chips += 2; S.lines.push(['BONUS BALL', 300]); }
     if (b.tags.heavy && counted) { S.lines.push(['HEAVY POT', 500]); this.ui.popup('HEAVY!', { color: '#c0a080', scale: 1.4 }); this.shake(0.2); }
     if (p.bonus && counted) {
@@ -426,6 +439,13 @@ export const ShotMixin = {
   // --------------------------------------------------------- relic FX
   explode(x, z, radius, strength, source) {
     const S = this.shot;
+    if (this.enc?.tstate?.id === 'lowgrav') { radius *= 1.3; strength *= 1.5; }
+    if (S && !S.house && (S.afterburns || 0) < 2 && this.synOn('afterburn')) {
+      S.afterburns = (S.afterburns || 0) + 1;
+      this.later(0.24, () => { if (this.shot === S) { this.explode(x, z, radius * 1.35, strength * 0.55, null); this.discoverSynergy('afterburn'); } });
+    }
+    this.fx.scar?.(x, z, 'scorch', radius * 0.7);
+    if (strength > 2) this.chaosHit(1 + (strength - 2) * 0.4, x, z);
     if (S) {
       S.explosions++;
       S.lines.push(['EXPLOSION', 150]);
@@ -513,9 +533,12 @@ export const ShotMixin = {
     if (S.house) { this.resolveHouse(S); return; }
 
     this.relicHook('shotEnd', S);
+    def.shotEnd?.(this, S, e);
 
     // ---- progress
     let delta = def.progress ? def.progress(this, S, e) : S.counted;
+    if (e.book) delta += this.bookieSettle(e, S);
+    if (def.rajisProgress) delta = def.rajisProgress(this, S, e, delta);
     let won = e.progress + delta >= e.goal;
     let eightFinish = false;
     if (S.eight && !def.classic) {
@@ -568,6 +591,7 @@ export const ShotMixin = {
     const pots = playerPots.filter(p => p.ball.kind !== 'cue');
     const npots = pots.length;
     const A = analyzeShot(this, S, e);
+    this.stateHook('shotEnd', S, A, e);
     if (npots) {
       const base = pots.reduce((s, p) => s + (p.ball.kind === 'golden' ? 500 : p.ball.num === 8 ? 250 : 100), 0);
       L.push([npots > 1 ? `POT x${npots}` : 'POT', base]);
@@ -586,6 +610,8 @@ export const ShotMixin = {
     for (const [k, v] of S.lines) { merged[k] = merged[k] || [0, 0]; merged[k][0] += v; merged[k][1]++; }
     for (const [k, [v, n]] of Object.entries(merged)) L.push([n > 1 && v > 0 ? `${k} x${n}` : k, v]);
     if (Object.keys(merged).length >= 5) this.achieve('what');
+    this.run.stats.mostTriggers = Math.max(this.run.stats.mostTriggers || 0, Object.keys(merged).length);
+    for (const p of pots) if (p.bank && p.counted) this.run.stats.longestBank = Math.max(this.run.stats.longestBank || 0, p.ball.cushions);
     if (S.isBreak && npots >= 2) this.achieve('clean_break');
     if (npots >= 3 && (S.explosions || S.zaps || pots.some(p => p.kiss))) this.achieve('domino');
     if (S.scratch) L.push(['SCRATCH', -200]);
@@ -595,19 +621,26 @@ export const ShotMixin = {
     if (potted) this.run.streak++; else this.run.streak = 0;
     this.run.stats.maxStreak = Math.max(this.run.stats.maxStreak || 0, this.run.streak);
     this.run.stats.mostBalls = Math.max(this.run.stats.mostBalls || 0, npots);
-    if (!potted) e.misses++;
+    if (!potted) { e.misses++; this.run.stats.misses = (this.run.stats.misses || 0) + 1; }
+    this.contractEvent('shot', potted);
     if (this.run.streak >= 2) S.mult += 0.25 * (this.run.streak - 1);
 
     // the headline technique gets its own popup; truly exceptional shots get the works
     // (first, so style/heat announcements queue up behind the reaction instead of piling on it)
     const headline = A.T.filter(t => t[2] >= 3).sort((a, b) => b[2] - a[2])[0];
-    if (A.skill >= 9 || (npots >= 3 && A.skill >= 4)) this.exceptionalShot(A);
+    if (A.skill >= 9 || (npots >= 3 && A.skill >= 4)) { this.exceptionalShot(A); this.later(1.5, () => this.comment('great')); }
     else if (headline) this.ui.popup(headline[0] + '!', { color: '#2bf0ff', scale: 1.25 });
+    if (npots >= 3) this.comment('combo');
+    else if (A.cats.has('bank') && Math.random() < 0.35) this.comment('bank');
+    else if (won && e.shots <= 0 && e.def.id !== 'blitz') this.comment('clutch');
+    else if (S.scratch && Math.random() < 0.4) this.comment('scratch');
 
     // STYLE: rewards interesting shots, fades with misses and repetition
     const run = this.run;
     const gBefore = styleGrade(run.style);
+    const styleBefore = run.style;
     run.style = styleAfterShot(run, potted, A.skill, S.scratch && !S.insured && !this.hasRelic('cashback'));
+    if (this.hasRelic('blind_faith') && run.style > styleBefore) run.style = Math.min(100, run.style + (run.style - styleBefore) * 0.5);
     const gAfter = styleGrade(run.style);
     run.stylePeak = Math.max(run.stylePeak || 0, gAfter);
     S.multX *= STYLE_MULT[gAfter];
@@ -619,13 +652,13 @@ export const ShotMixin = {
     if (potted && A.skill > 1) this.addHeat(heatFromSkill(A.skill));
     S.multX *= 1 + 0.15 * (run.heat || 0);
     // aim assist handicap bonus
-    const aimLvl = e.challenge?.id === 'noguide' || e.stake?.id === 'noguide' ? 'none' : this.meta.s.aim;
+    const aimLvl = e.challenge?.id === 'noguide' || e.stake?.id === 'noguide' || this.hasRelic('blind_faith') || this.run.hand?.includes('noguide') ? 'none' : this.meta.s.aim;
     if (aimLvl === 'reduced') S.multX *= 1.05;
     else if (aimLvl === 'minimal') S.multX *= 1.15;
     else if (aimLvl === 'none') S.multX *= 1.25;
 
     const sum = L.reduce((s, l) => s + l[1], 0);
-    const mult = S.mult * S.multX;
+    const mult = S.mult * S.multX * (this.run.rewardMul || 1);
     const total = Math.max(0, Math.round(sum * mult));
     this.run.score += total;
     e.score = (e.score || 0) + total;
@@ -636,10 +669,12 @@ export const ShotMixin = {
     }
     if (total >= 5000) this.achieve('mega');
     if (L.length) this.ui.tally(L, total, mult, this.run.streak);
+    this.recKeep(S, total, A, npots);
 
 
     // chips
     S.chips += Math.min(3, pots.filter(p => p.counted).length);
+    if (e.tstate?.chipsMul && S.chips > 0) S.chips = Math.round(S.chips * e.tstate.chipsMul);
     if (S.chips > 0) { this.addChips(S.chips); this.ui.chipGain(S.chips); }
 
     // big-shot celebration
@@ -649,6 +684,7 @@ export const ShotMixin = {
 
     // scratch penalty (INSURANCE covers the first one on each table)
     if (S.scratch) {
+      if (!S.insured) this.contractEvent('scratch');
       this.meta.stat('scratches').forEach(a => this.ui.achievement(this.meta.data, a.id));
       this.run.stats.scratches = (this.run.stats.scratches || 0) + 1;
       e.scratches = (e.scratches || 0) + 1;
@@ -662,6 +698,13 @@ export const ShotMixin = {
     if (e.challenge?.shot) this.challengeCheck(e.challenge.shot(this, e, S, potted));
     if (e.stake?.shot) this.stakeCheck(e.stake.shot(this, e, S, potted));
 
+    // ONE CUE: a miss (or a scratch) costs a life, never a shot
+    if (this.run.oneCue && !won && (!potted || (S.scratch && !S.insured)) && def.id !== 'blitz') {
+      this.later(0.3, () => this.ui.popup(S.scratch ? 'SCRATCH  -1 LIFE' : 'MISS  -1 LIFE', { color: '#ff3b5c', scale: 1.3 }));
+      this.loseHeart('ONE CUE', true);
+      if (this.run.hearts <= 0) { this.saveRun(); this.after(1.2, () => this.endRun(false)); return; }
+    }
+
     this.ui.updateHUD(true);
 
     // THE CLOCK: trick shots buy time back
@@ -674,6 +717,12 @@ export const ShotMixin = {
       if (ph > (e.phase || 1)) { e.phase = ph; this.bossPhase(ph); }
     }
 
+    // RIVALS: they take their turn after yours
+    if (e.rivalDef && !e.rivalDef.mirror && !won && !e.stakeBroken) {
+      this.rivalTurn(e);
+      if (e.rivalScore >= e.goal) { this.saveRun(); this.after(0.8, () => this.failEncounter(`${e.rivalDef.name} WINS`)); this.state = 'result'; return; }
+    }
+
     // the save follows the table shot by shot (penalties and refunds included)
     const tbl = this.run?.inTable;
     if (tbl) { tbl.left = e.shots; tbl.chBroken = e.chBroken || null; if (def.id === 'blitz') tbl.timer = e.timer; this.saveRun(); }
@@ -681,13 +730,17 @@ export const ShotMixin = {
     // ---- end conditions
     if (e.stakeBroken) { this.failEncounter('STAKE BROKEN'); return; }
     if (won) { this.winEncounter(); return; }
-    if (def.id === 'blitz' ? e.timer <= 0 : e.shots <= 0) { this.failEncounter(def.id === 'blitz' ? 'TIME UP' : 'OUT OF SHOTS'); return; }
+    if (def.id === 'blitz' ? e.timer <= 0 : e.shots <= 0) { this.failEncounter(def.id === 'blitz' ? 'TIME UP' : e.puzzle ? 'OUT OF ATTEMPTS' : 'OUT OF SHOTS'); return; }
 
     def.afterShot?.(this, e, S);
     for (const m of e.mods || []) m.afterShot?.(this, e, S);
     e.anomaly?.afterShot?.(this, e, S);
+    this.stateHook('afterShot', e, S);
     if (e.inferno) this.rollChaos();
+    if (e.puzzle) { this.beginAim(); return; }
     this.ensureBalls();
+    // some tables take a turn of their own (missiles, the car, the tank)
+    if (def.enemyTurn?.(this, e, S)) return;
 
     // THE HOUSE plays after your misses — and, as it gets angrier, after your pots too
     if (def.house && potted) e.housePots = (e.housePots || 0) + 1;
@@ -736,7 +789,10 @@ export const ShotMixin = {
     if (this.runEnding || !this.enc || this.enc.done) return;
     this.state = 'aim';
     this.charge = 0;
+    this.aimStart = this.time;
     this.applyRules();
+    this.room.setMood?.(this.crowdMood());
+    this.enc.def.beforeAim?.(this, this.enc);
     const cue = this.physics.cue;
     if (!cue || cue.state !== 'table') { this.beginPlace(); return; }
     this.cue.visible = true;

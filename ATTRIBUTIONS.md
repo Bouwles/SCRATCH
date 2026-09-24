@@ -1,6 +1,6 @@
 # SCRATCH — Attributions and rights audit
 
-SCRATCH v1.0.0 was created by **Paul Nercessian**.
+SCRATCH v2.0.0 (AFTERHOURS) was created by **Paul Nercessian**.
 
 This file lists everything in the shipped game that was not written for it, and
 how each piece may be redistributed. Full licence texts ship inside the web
@@ -49,7 +49,8 @@ Their title cards use the game's own fonts.
 
 ## Audit notes
 
-- Checked on 2026-09-23. The source contains no image, audio, model or font
+- Checked again for 2.0.0 on 2026-09-24. The AFTERHOURS update adds no
+  third-party code, fonts, images or sounds. The source contains no image, audio, model or font
   files other than the Fontsource packages listed above (`node_modules/@fontsource/*`).
 - Nothing in the game uses real brands, trademarks or likenesses.
   "The House", "The Dealer" and the other bosses are fictional.

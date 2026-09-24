@@ -5,8 +5,9 @@ import { THEMES, BALL_SKINS, CUE_SKINS } from './cosmetics.js';
 import { RELICS } from './relics.js';
 
 const KEY = 'scratch_save_v1';            // storage slot (the format inside is versioned)
-export const SAVE_VERSION = 2;
-export const GAME_VERSION = '1.0.0';
+export const SAVE_VERSION = 3;
+export const GAME_VERSION = '2.0.0';
+export const UPDATE_NAME = 'AFTERHOURS';
 
 export const ACHIEVEMENTS = [
   { id: 'first_blood', name: 'FIRST BLOOD', desc: 'Pot your first ball.' },
@@ -42,9 +43,37 @@ export const ACHIEVEMENTS = [
   { id: 'breaker', name: 'BREAK POINT', desc: 'Win a run at BREAK 1 or higher.', reward: 'THE BREAKER cue' },
   { id: 'classic_win', name: 'CLASSIC', desc: 'Win your first normal 8-ball match.' },
   { id: 'hustler', name: 'HUSTLER', desc: 'Beat the Expert AI at normal 8-ball.', reward: 'EBONY classic cue' },
+  { id: 'tourney', name: 'HOUSE CHAMPION', desc: 'Win a four-player Classic tournament.', reward: 'GOLD INLAY classic cue' },
   { id: 'flashback', name: 'WE\'VE MET BEFORE', desc: 'Play the table from 1987.', secret: true },
   { id: 'eights', name: 'EIGHT OF EIGHT', desc: 'Wake the eight on the title screen.', secret: true, reward: 'ALL EIGHTS balls' },
   { id: 'curious', name: 'CURIOUS', desc: 'Ask who made this. Five times.', secret: true },
+  // ---- AFTERHOURS
+  { id: 'state_first', name: 'SOMETHING CHANGED', desc: 'Live through your first Table State.' },
+  { id: 'contractor', name: 'CONTRACTOR', desc: 'Complete 5 contracts.', stat: ['contracts', 5], reward: 'THE FINE PRINT cue' },
+  { id: 'whale', name: 'WHALE', desc: 'Win a HIGH ROLLER table after going ALL IN.' },
+  { id: 'rival_beat', name: 'NOT TODAY', desc: 'Beat a rival at their own table.' },
+  { id: 'nemesis', name: 'OLD FRIENDS', desc: 'Defeat your Nemesis.', reward: 'GRUDGE cue' },
+  { id: 'synergist', name: 'CHEMIST', desc: 'Discover 5 hidden synergies.', reward: 'ALCHEMY balls' },
+  { id: 'mad_science', name: 'MAD SCIENCE', desc: 'Discover every hidden synergy.', secret: true },
+  { id: 'overcharged', name: 'OVERCHARGED', desc: 'Overcharge a relic.' },
+  { id: 'trick_table', name: 'SHOWSTOPPER', desc: 'Solve a Trick Table.' },
+  { id: 'remixed', name: 'REMIXED', desc: 'Beat a boss remix.' },
+  { id: 'boss_rush', name: 'RUSH HOUR', desc: 'Clear Boss Rush.' },
+  { id: 'one_cue', name: 'ONE CUE', desc: 'Clear a One Cue run.' },
+  { id: 'chaos_win', name: 'AGENT OF CHAOS', desc: 'Win a Chaos run.' },
+  { id: 'risky', name: 'NO RISK, NO RELIC', desc: 'Win a run holding 2 risk relics.' },
+  { id: 'afterhours', name: 'AFTER HOURS', desc: 'Stay after closing.', secret: true },
+  { id: 'last_game', name: 'LAST GAME', desc: 'Beat The Owner.', secret: true, reward: 'CLOSING TIME table' },
+  { id: 'insomniac', name: 'INSOMNIAC', desc: 'Something is awake at 03:77.', secret: true },
+  { id: 'regular', name: 'THE REGULAR', desc: 'Finish 10 runs.', stat: ['finished', 10] },
+  // ---- (hidden entirely until you find it)
+  { id: 'rajis_found', name: 'RAJIS?', desc: 'Find RAJIS.', secret: true, rajis: true },
+  { id: 'intercepted', name: 'INTERCEPTED', desc: 'Defeat Richard.', secret: true, rajis: true, reward: 'MISSILE cue' },
+  { id: 'supply_chain', name: 'SUPPLY CHAIN', desc: 'Defeat Neil.', secret: true, rajis: true, reward: 'RADAR balls' },
+  { id: 'machine_learning', name: 'MACHINE LEARNING', desc: 'Defeat Paul.', secret: true, rajis: true, reward: 'CYBER BULLET cue' },
+  { id: 'heavy_industry', name: 'HEAVY INDUSTRY', desc: 'Defeat Yahya.', secret: true, rajis: true, reward: 'WARNING STRIPE cue' },
+  { id: 'system_online', name: 'SYSTEM ONLINE', desc: 'Complete RAJIS.', secret: true, rajis: true, reward: 'COMMAND table' },
+  { id: 'paulyamin', name: 'TWO OF A KIND', desc: 'Defeat PAULYAMIN.', secret: true, rajis: true, reward: 'ROBOT balls' },
 ];
 
 // Level → what it unlocks (in addition to cosmetic unlock.level fields).
@@ -62,10 +91,10 @@ export function xpForLevel(l) { return Math.round(300 + (l - 1) * 180 + Math.pow
 export function classicDefaults() {
   return {
     settings: { quality: 'high', shadows: true, reflections: true, aa: true, aim: 'full', camera: '3d', ambience: true, music: 0.5, sfx: 0.9 },
-    look: { felt: 'green', cue: 'wood', light: 'warm', balls: 'classic' },
+    look: { felt: 'green', cue: 'wood', light: 'warm', balls: 'classic', room: 'lounge' },
     names: { p1: 'Player 1', p2: 'Player 2' },
-    ai: 'normal', bestOf: 1,
-    stats: { played: 0, won: 0, streak: 0, bestStreak: 0, breakRuns: 0, potted: 0, longest: 0, frames: 0, localMatches: 0, aiWins: { easy: 0, normal: 0, hard: 0, expert: 0 } },
+    ai: 'normal', bestOf: 1, style: 'balanced', clock: 0,
+    stats: { played: 0, won: 0, streak: 0, bestStreak: 0, breakRuns: 0, potted: 0, longest: 0, frames: 0, localMatches: 0, aiWins: { easy: 0, normal: 0, hard: 0, expert: 0 }, framesWon: 0, fouls: 0, clockFouls: 0, highRun: 0, tourneys: 0, tourneysPlayed: 0 },
   };
 }
 
@@ -87,10 +116,10 @@ function defaults() {
     bought: [],             // cosmetics bought in shops
     achievements: {},
     seenRelics: {},
-    stats: { pots: 0, banks: 0, scratches: 0, golds: 0, runs: 0, wins: 0, bestScore: 0, bestShot: 0, tables: 0, bosses: 0 },
+    stats: { pots: 0, banks: 0, scratches: 0, golds: 0, runs: 0, wins: 0, bestScore: 0, bestShot: 0, tables: 0, bosses: 0, contracts: 0, finished: 0 },
     settings: {
       // gameplay
-      camera: 'cinematic', aim: 'full', shake: 1, flash: 'full', heat: true,
+      camera: 'cinematic', aim: 'full', shake: 1, flash: 'full', heat: true, commentary: true,
       // graphics
       gfx: 'ps1', resScale: 'auto', crt: true, bloom: true, particles: 'high',
       // ui
@@ -98,7 +127,7 @@ function defaults() {
       // audio
       master: 0.8, music: 0.55, sfx: 0.9,
     },
-    bests: { highScore: 0, fastestWin: 0, highestHeat: 0, largestCombo: 0, mostBalls: 0, bestGrade: '' },
+    bests: { highScore: 0, fastestWin: 0, highestHeat: 0, largestCombo: 0, mostBalls: 0, bestGrade: '', highestStyle: 0, longestBank: 0, mostTriggers: 0, furthestFloor: 0, bossRushTime: 0, bossRushScore: 0, bossRushMisses: -1, chaosBest: 0, oneCueBest: 0 },
     tutorialDone: false,
     tips: {},                 // contextual tips already shown
     bosses: {},               // boss id → times beaten
@@ -108,6 +137,18 @@ function defaults() {
     daily: null,              // { date, best, bestHeat, completed, played }
     endless: { deepest: 0, best: 0, heat: 0 },
     classic: classicDefaults(),
+    // ---- AFTERHOURS (save v3)
+    synergies: {},            // hidden synergy id → when it was first discovered
+    rivals: {},               // rival id → { wins, losses, nemesis, level }
+    runHistory: [],           // the last 10 finished runs, newest first
+    favorites: {},            // relic id → true (Collection ★ — cosmetic only)
+    remixes: {},              // boss id → remixes beaten
+    states: {},               // table state id → times lived through
+    afterhours: { found: false, cleared: 0 },
+    rajis: { found: false, clears: 0, runs: 0, bosses: {}, fastest: 0, best: 0 },
+    secrets: {},              // small things found (title easter eggs…)
+    announced: {},            // unlock notices already shown
+    handSel: [],              // handicaps chosen for the next run
     v: SAVE_VERSION,
   };
 }
@@ -128,6 +169,12 @@ function mergeSave(d) {
     tips: obj(d.tips), bosses: obj(d.bosses), unlocks: obj(d.unlocks),
     seen: { bosses: obj(d.seen?.bosses), anomalies: obj(d.seen?.anomalies) },
     endless: { ...def.endless, ...obj(d.endless) },
+    synergies: obj(d.synergies), rivals: obj(d.rivals), favorites: obj(d.favorites), remixes: obj(d.remixes), states: obj(d.states),
+    secrets: obj(d.secrets), announced: obj(d.announced),
+    runHistory: Array.isArray(d.runHistory) ? d.runHistory.filter(r => r && typeof r === 'object').slice(0, 10) : [],
+    handSel: Array.isArray(d.handSel) ? d.handSel.filter(x => typeof x === 'string') : [],
+    afterhours: { ...def.afterhours, ...obj(d.afterhours) },
+    rajis: { ...def.rajis, ...obj(d.rajis), bosses: obj(d.rajis?.bosses) },
     achievements: obj(d.achievements), seenRelics: obj(d.seenRelics),
     bought: Array.isArray(d.bought) ? d.bought : [],
     xp: Number.isFinite(d.xp) ? d.xp : 0, level: Number.isFinite(d.level) && d.level >= 1 ? d.level : 1,
@@ -175,11 +222,33 @@ export class Meta {
     this.save();
   }
 
+  // What the club shows you. Things open up by playing well, never by grinding:
+  // a player who already beat SCRATCH before AFTERHOURS sees most of it at once.
+  unlocked(feature) {
+    const d = this.data, st = d.stats, B = d.bests;
+    const wins = st.wins || 0, heat = B.highestHeat || 0, far = B.furthestFloor || 0;
+    switch (feature) {
+      case 'contracts': case 'highroller': case 'rivals': case 'newtables':
+        return wins >= 1 || far >= 3;
+      case 'onecue': case 'handicaps': return wins >= 1;
+      case 'states': return wins >= 2 || heat >= 4 || (wins >= 1 && far >= 3 && (st.runs || 0) >= 6);
+      case 'chaos': return wins >= 2 || heat >= 5;
+      case 'bossrush': return wins >= 3 || Object.keys(d.bosses || {}).length >= 5;
+      case 'afterhours': return !!d.afterhours?.found;
+      case 'rajis': return !!d.rajis?.found;
+      default: return false;
+    }
+  }
+
   markSeen(kind, id) {
     if (!kind || !id) return;
     const bag = this.data.seen[kind] = this.data.seen[kind] || {};
     if (!bag[id]) { bag[id] = 1; this.save(); }
   }
+
+  // things that belong to RAJIS do not exist until it has been found
+  visible(item) { return !item?.rajis || !!this.data.rajis?.found; }
+  achievementList() { return ACHIEVEMENTS.filter(a => this.visible(a)); }
 
   get level() { return this.data.level; }
   get s() { return this.data.settings; }
@@ -198,8 +267,8 @@ export class Meta {
 
   lockedCosmetics() {
     return [
-      ...BALL_SKINS.filter(b => !this.isUnlocked(b)).map(b => ({ kind: 'ball', item: b })),
-      ...CUE_SKINS.filter(b => !this.isUnlocked(b)).map(b => ({ kind: 'cue', item: b })),
+      ...BALL_SKINS.filter(b => !this.isUnlocked(b) && !b.rajis).map(b => ({ kind: 'ball', item: b })),
+      ...CUE_SKINS.filter(b => !this.isUnlocked(b) && !b.rajis).map(b => ({ kind: 'cue', item: b })),
     ];
   }
   buyCosmetic(item) { const k = `${item.kind}:${item.id}`; if (!this.data.bought.includes(k)) this.data.bought.push(k); this.save(); }

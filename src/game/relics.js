@@ -458,16 +458,137 @@ export const RELICS = [
     id: 'black_label', name: 'BLACK LABEL', rarity: 'legendary', tags: ['CURSED'],
     desc: 'Cursed relics are 50% stronger (the good part), and turn up twice as often.',
   },
+  // ------------------------------------------------------------- RISK
+  // Cursed relics with a bigger upside and a sharper edge (AFTERHOURS).
+  {
+    id: 'double_edge', name: 'DOUBLE EDGE', rarity: 'cursed', risk: true, tags: ['CURSED', 'CONTROL'],
+    desc: 'Every pot scores x2. BUT every pocket is 12% smaller.',
+    pockets(G, pk) { for (const p of pk) p.scale *= 0.88; },
+    shotEnd(G, S) { if (S.pots.some(p => !p.house && p.counted)) S.multX *= 2 * (curse(G) > 1 ? 1.25 : 1); },
+  },
+  {
+    id: 'debt', name: 'DEBT', rarity: 'cursed', risk: true, tags: ['CURSED', 'GREED'],
+    desc: '+35 chips the moment you take it. BUT the next two shops charge double.',
+    gain(G) { G.addChips(35); G.run.debtShops = (G.run.debtShops || 0) + 2; G.popText('+35 CHIPS  ON CREDIT', '#ffc21c', 1.2); },
+  },
+  {
+    id: 'blind_faith', name: 'BLIND FAITH', rarity: 'cursed', risk: true, tags: ['CURSED', 'CONTROL'],
+    desc: 'The aim guide is gone for good. Every shot scores x1.4 and STYLE climbs 50% faster.',
+    blind: true,
+    shotEnd(G, S) { if (S.pots.length) S.multX *= 1.4 * (curse(G) > 1 ? 1.2 : 1); },
+  },
+  {
+    id: 'final_form', name: 'FINAL FORM', rarity: 'cursed', risk: true, tags: ['CURSED', 'COMBO'],
+    desc: 'Score x(1 + 0.4 per HEAT). BUT a shot that pots nothing cools the HEAT.',
+    shotEnd(G, S) {
+      if (S.pots.some(p => !p.house && p.ball.kind !== 'cue')) S.multX *= (1 + 0.4 * heat(G)) * curse(G);
+      else if (heat(G) > 0) G.later(0.2, () => G.coolHeat(0.82));
+    },
+  },
+  {
+    id: 'last_life', name: 'LAST LIFE', rarity: 'cursed', risk: true, tags: ['CURSED'],
+    desc: 'On your last heart every pot scores x3 and pays double chips. BUT it costs a max heart to take.',
+    gain(G) { G.run.maxHearts = Math.max(1, G.run.maxHearts - 1); G.run.hearts = Math.min(G.run.hearts, G.run.maxHearts); },
+    shotEnd(G, S) { if (G.run.hearts === 1 && S.pots.length) { S.multX *= 3 * curse(G); S.chips *= 2; S.lines.push(['LAST LIFE', 500]); } },
+  },
 ];
 
-export const relicById = (id) => RELICS.find(r => r.id === id);
+// ------------------------------------------------------------ PROTOCOLS
+// A second relic set that only exists somewhere else. Same hooks, same slots.
+export const PROTOCOLS = [
+  {
+    id: 'p_missile', name: 'MISSILE STRIKE', rarity: 'rare', rajis: true, tags: ['CHAOS'],
+    desc: 'Every third shot, the first target you hit takes a missile.',
+    shotStart(G, S) { G.run.pMissile = (G.run.pMissile || 0) + 1; S.pMissile = G.run.pMissile % 3 === 0; },
+    firstHit(G, S, ball) { if (S.pMissile) { G.explode(ball.x, ball.z, 0.27, 1.9, ball); G.popText('MISSILE STRIKE', '#ff3b30', 1.2); } },
+  },
+  {
+    id: 'p_radar', name: 'RADAR SWEEP', rarity: 'common', rajis: true, tags: ['CONTROL'],
+    desc: 'Long aim hints and the first rebound. PERFECT POSITION pays double.',
+    laser: true,
+    shotStart(G, S) { S.posX = Math.max(S.posX || 1, 2); },
+  },
+  {
+    id: 'p_supply', name: 'SUPPLY DROP', rarity: 'common', rajis: true, tags: ['GREED'],
+    desc: '+1 round every mission, and a supply crate drops onto the table. Sink it for +2 credits.',
+    extraShots: 1,
+    encounterStart(G) { G.later(0.9, () => G.spawnDropBall(20, 'bonus')); },
+  },
+  {
+    id: 'p_armor', name: 'ARMOR PLATING', rarity: 'common', rajis: true, tags: ['CONTROL'],
+    desc: 'The first friendly fire each mission is free. Your cue ball is 30% heavier.',
+    encounterStart(G) { const c = G.physics.cue; if (c) c.m = 1.3; },
+    scratch(G, S) { if (!G.enc || G.enc.armorUsed) return; G.enc.armorUsed = true; S.insured = true; G.popText('ARMOR HOLDS', '#8fd14f', 1.2); },
+  },
+  {
+    id: 'p_drone', name: 'DRONE SUPPORT', rarity: 'rare', rajis: true, tags: ['COMBO'],
+    desc: 'Every target you destroy sends a drone to nudge the nearest target toward its nearest drop zone.',
+    pot(G, S, pot) {
+      if (!pot.counted || (S.drones || 0) >= 3) return;
+      S.drones = (S.drones || 0) + 1;
+      G.later(0.15, () => G.droneNudge?.(pot.pocket));
+    },
+  },
+  {
+    id: 'p_overwatch', name: 'OVERWATCH', rarity: 'common', rajis: true, tags: ['CONTROL'],
+    desc: 'Long-range kills (over 1.2 m) score x2 and pay +2 credits.',
+    pot(G, S, pot) { if (pot.counted && pot.ball.travel >= 1.2) { S.chips += 2; S.overwatch = true; } },
+    shotEnd(G, S) { if (S.overwatch) S.multX *= 2; },
+  },
+  {
+    id: 'p_chain', name: 'CHAIN OF COMMAND', rarity: 'rare', rajis: true, tags: ['COMBO'],
+    desc: 'Every consecutive successful shot adds +0.5x (max +4x).',
+    shotEnd(G, S) { if (S.pots.length && G.run.streak > 0) S.mult += Math.min(4, 0.5 * G.run.streak); },
+  },
+  {
+    id: 'p_counter', name: 'COUNTERMEASURES', rarity: 'rare', rajis: true, tags: ['CONTROL'],
+    desc: 'Enemy missiles, shoves and shells hit 60% softer. Armor cracks from any hit.',
+    counter: true,
+  },
+  {
+    id: 'p_shock', name: 'SHOCK AND AWE', rarity: 'legendary', rajis: true, tags: ['CHAOS'],
+    desc: 'The first shot of every mission detonates every hard collision.',
+    ballHit(G, S, a, b, v) {
+      const e = G.enc;
+      if (!e || e.shotsTaken > 1 || v < 1.2 || (S.awe || 0) >= 8) return;
+      S.awe = (S.awe || 0) + 1;
+      G.explode((a.x + b.x) / 2, (a.z + b.z) / 2, 0.16, 1.1, null);
+    },
+  },
+  {
+    id: 'p_repair', name: 'EMERGENCY REPAIRS', rarity: 'common', rajis: true, tags: ['CONTROL'],
+    desc: '+1 max hull now. Every boss you beat repairs 1 hull.',
+    gain(G) { G.run.maxHearts++; G.heal(1); },
+    bossWin(G) { G.heal(1); G.popText('REPAIRS', '#8fd14f'); },
+  },
+  {
+    id: 'p_intel', name: 'FIELD INTEL', rarity: 'common', rajis: true, tags: ['GREED'],
+    desc: '+3 credits per mission. The enemy\'s next move is shown on your HUD.',
+    intel: true,
+    encounterStart(G) { G.later(0.5, () => G.addChips(3)); },
+  },
+  {
+    id: 'p_omega', name: 'PROTOCOL OMEGA', rarity: 'legendary', rajis: true, risk: true, tags: ['CURSED'],
+    desc: 'Everything scores x2.5. BUT friendly fire costs a hull.',
+    shotEnd(G, S) { if (S.pots.length) S.multX *= 2.5; },
+    scratch(G, S) { if (!S.insured) G.loseHeart('PROTOCOL OMEGA'); },
+  },
+];
+
+export const relicById = (id) => RELICS.find(r => r.id === id) || PROTOCOLS.find(r => r.id === id);
+
+// what the club is willing to offer this save (risk relics wait for the first win)
+let gate = () => true;
+export function setRelicGate(fn) { gate = fn || (() => true); }
 
 // options: rarityBoost, forceRarity, exclude, upgraded (run.relicLv: owned relics
-// that can still be upgraded may be offered again), cursedX, noCursed
-export function rollRelics(n, owned, { rarityBoost = 0, forceRarity = null, exclude = [], upgraded = null, cursedX = 1, noCursed = false } = {}) {
+// that can still be upgraded may be offered again), cursedX, noCursed,
+// pool ('club' or 'rajis': which relic set to draw from)
+export function rollRelics(n, owned, { rarityBoost = 0, forceRarity = null, exclude = [], upgraded = null, cursedX = 1, noCursed = false, pool: set = 'club' } = {}) {
   const have = new Set(owned.map(r => r.id));
   const canUp = (r) => upgraded && r.up && have.has(r.id) && !((upgraded[r.id] || 1) >= 2);
-  const pool = RELICS.filter(r => (r.stack || !have.has(r.id) || canUp(r)) && !exclude.includes(r.id) && !(noCursed && r.rarity === 'cursed'));
+  const src = set === 'rajis' ? PROTOCOLS : RELICS.filter(r => gate(r));
+  const pool = src.filter(r => (r.stack || !have.has(r.id) || canUp(r)) && !exclude.includes(r.id) && !(noCursed && r.rarity === 'cursed'));
   const out = [];
   for (let k = 0; k < n && pool.length; k++) {
     let cand = pool.filter(r => !out.includes(r));

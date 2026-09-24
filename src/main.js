@@ -22,6 +22,8 @@ import { Game } from './game/Game.js';
 import { RELICS, relicById } from './game/relics.js';
 import { ENCOUNTERS, BOSSES, makeEncounter } from './game/encounters.js';
 import { MODS, CHALLENGES, ANOMALIES, SECRET_ANOMALY } from './game/mastery.js';
+import { RAJIS_BOSSES } from './game/rajis.js';
+import { TABLE_STATES, CONTRACTS, RIVALS, SYNERGIES } from './game/afterhours.js';
 
 // Japanese faces (subtitles, neon signs) are only fetched when kana/kanji are drawn
 const JP_RANGE = 'U+3000-30FF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FF00-FFEF';
@@ -81,7 +83,7 @@ async function boot() {
   // developer handles only exist when explicitly asked for (?debug)
   if (/[?&]debug\b/.test(location.search)) {
     window.__scratch = game;
-    window.__scratchData = { RELICS, relicById, ENCOUNTERS, BOSSES, MODS, CHALLENGES, ANOMALIES, SECRET_ANOMALY, makeEncounter };
+    window.__scratchData = { RELICS, relicById, ENCOUNTERS, BOSSES, MODS, CHALLENGES, ANOMALIES, SECRET_ANOMALY, makeEncounter, RAJIS_BOSSES, TABLE_STATES, CONTRACTS, RIVALS, SYNERGIES };
   }
   game.setupMenuTable();
   game.state = 'title';

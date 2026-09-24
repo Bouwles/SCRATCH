@@ -297,6 +297,168 @@ export const BOSSES = {
   },
 };
 
+// ------------------------------------------------------- AFTERHOURS tables
+// New objectives built from the same parts: tags, rings, pocket rules and the
+// explode/respawn helpers (run helpers live in after.js). gate: the save has to
+// have seen enough of the club before these tables turn up.
+Object.assign(ENCOUNTERS, {
+  sequence: {
+    id: 'sequence', name: 'SEQUENCE', tag: 'ORDER', minFloor: 1, weight: 5, gate: 'newtables',
+    blurb: 'Numbered balls. Sink them in order. Out of order, it comes back and costs a shot.',
+    params: { goal: [4, 5, 5], shots: [9, 9, 10], rack: [9, 10, 11] },
+    setup(G, e) { e.layout = rackScatter(G, e.p.rack, false); G.markSequence(e); },
+    counts(G, S, pot) {
+      const e = G.enc, n = pot.ball.tags.seq;
+      if (!n) return false;
+      const want = S.seqAt ?? e.seqNext;
+      if (n === want) { S.seqAt = want + 1; return true; }
+      (S.seqWrong = S.seqWrong || []).push(pot.ball);
+      return false;
+    },
+    afterShot(G, e, S) { G.afterSequence(e, S); },
+    objective: e => `SINK ${e.goal} IN ORDER — NEXT: ${Math.min(e.goal, e.seqNext || 1)}`,
+  },
+  territory: {
+    id: 'territory', name: 'TERRITORY', tag: 'POINTS', minFloor: 1, weight: 5, gate: 'newtables',
+    blurb: 'Every pocket is worth something different. Reach the total.',
+    params: { goal: [8, 10, 12], shots: [8, 8, 9], rack: [12, 15, 15] },
+    setup(G, e) { e.layout = randomRack(G, e.p.rack); e.terr = shuffle([1, 1, 2, 2, 3, 3]); },
+    pockets(G, pk, e) { if (e?.terr) pk.forEach((p, i) => { p.label = `x${e.terr[i]}`; p.labelColor = ['#8a86a8', '#2bf0ff', '#ffc21c'][e.terr[i] - 1]; }); },
+    progress(G, S, e) { return S.pots.filter(p => p.counted && !p.house).reduce((a, p) => a + (e.terr?.[p.pocket.index] || 1), 0); },
+    afterShot(G, e) { e.terrTick = (e.terrTick || 0) + 1; if (e.terrTick % 3 === 0) { e.terr.push(e.terr.shift()); G.applyRules(); G.popText('THE BORDERS MOVE', '#2bf0ff'); } },
+    objective: e => `SCORE ${e.goal} POINTS — POCKETS PAY x1, x2 OR x3`,
+  },
+  bounty: {
+    id: 'bounty', name: 'BOUNTY', tag: 'HUNT', minFloor: 1, weight: 5, gate: 'newtables',
+    blurb: 'One ball carries a bounty worth 3. Leave it for 3 shots and it slips away to another ball.',
+    params: { goal: [6, 7, 8], shots: [8, 8, 9], rack: [10, 12, 15] },
+    setup(G, e) { e.layout = randomRack(G, e.p.rack); G.later(0.9, () => G.markBounty(e)); },
+    progress(G, S) { return S.counted + 2 * S.pots.filter(p => p.counted && p.ball.tags.bounty).length; },
+    afterShot(G, e, S) { G.afterBounty(e, S); },
+    objective: e => `SCORE ${e.goal} — THE BOUNTY BALL IS WORTH 3`,
+  },
+  escalation: {
+    id: 'escalation', name: 'ESCALATION', tag: 'RISING', minFloor: 2, weight: 5, gate: 'newtables',
+    blurb: 'Every pot shrinks the pockets and raises the multiplier. Stay ahead of it.',
+    params: { goal: [5, 6, 7], shots: [9, 9, 10], rack: [15, 15, 15] },
+    setup(G, e) { e.layout = randomRack(G, e.p.rack); },
+    pockets(G, pk, e) { const k = Math.max(0.58, Math.pow(0.9, e?.progress || 0)); for (const p of pk) p.scale *= k; },
+    shotEnd(G, S, e) { if (S.pots.some(p => p.counted && !p.house)) { S.mult += 0.4 * (e.progress + 1); S.lines.push(['ESCALATION', 150 * (e.progress + 1)]); } },
+    objective: e => `SINK ${e.goal} — EVERY POT SHRINKS THE POCKETS`,
+  },
+  hotpotato: {
+    id: 'hotpotato', name: 'HOT POTATO', tag: 'FUSE', minFloor: 1, weight: 5, gate: 'newtables',
+    blurb: 'One ball is burning. Sink it within 3 shots for double, or it blows up and costs you 2 shots.',
+    params: { goal: [5, 6, 7], shots: [9, 9, 10], rack: [10, 12, 15] },
+    setup(G, e) { e.layout = randomRack(G, e.p.rack); G.later(0.9, () => G.markHot(e)); },
+    progress(G, S) { return S.counted + S.pots.filter(p => p.counted && p.ball.tags.hot).length; },
+    afterShot(G, e, S) { G.afterHot(e, S); },
+    objective: e => `SINK ${e.goal} — THE HOT BALL COUNTS DOUBLE`,
+  },
+  lockdown: {
+    id: 'lockdown', name: 'LOCKDOWN', tag: 'SEAL', minFloor: 2, weight: 5, gate: 'newtables',
+    blurb: 'Every second shot another pocket seals. The next one to go is marked.',
+    params: { goal: [4, 5, 6], shots: [8, 8, 9], rack: [12, 15, 15] },
+    setup(G, e) { e.layout = randomRack(G, e.p.rack); e.closed = []; e.lockNext = Math.floor(rand() * 6); },
+    pockets(G, pk, e) { if (e?.lockNext != null && pk[e.lockNext].open) { pk[e.lockNext].label = 'CLOSING'; pk[e.lockNext].labelColor = '#ff3b5c'; } },
+    afterShot(G, e) { G.afterLockdown(e); },
+    objective: e => `SINK ${e.goal} BEFORE THE POCKETS SEAL`,
+  },
+  route: {
+    id: 'route', name: 'PERFECT ROUTE', tag: 'ROUTE', minFloor: 1, weight: 4, gate: 'newtables',
+    blurb: 'Three marked balls. Sink all three without a single shot that misses them. A miss resets the route.',
+    params: { goal: [3, 3, 4], shots: [8, 8, 9], rack: [9, 10, 12] },
+    setup(G, e) { e.layout = rackScatter(G, e.p.rack, false); G.later(0.4, () => G.markRoute(e)); },
+    counts(G, S, pot) { return !!pot.ball.tags.route; },
+    progress(G, S, e) { return S.counted > 0 ? S.counted : -e.progress; },
+    afterShot(G, e, S) { G.afterRoute(e, S); },
+    objective: e => `SINK THE ${e.goal} MARKED BALLS — NO MISSES`,
+  },
+  chain: {
+    id: 'chain', name: 'CHAIN', tag: 'STREAK', minFloor: 1, weight: 4, gate: 'newtables',
+    blurb: 'Pot something on shot after shot. A shot that pots nothing breaks the chain back to zero.',
+    params: { goal: [3, 4, 4], shots: [10, 10, 11], rack: [12, 15, 15] },
+    setup(G, e) { e.layout = randomRack(G, e.p.rack); },
+    progress(G, S, e) { return S.counted > 0 ? 1 : -e.progress; },
+    objective: e => `POT ON ${e.goal} SHOTS IN A ROW`,
+  },
+  // a race against someone you never quite see (run helpers: after.js)
+  rival: {
+    id: 'rival', name: 'RIVAL TABLE', tag: 'RACE', minFloor: 1, weight: 0,
+    blurb: 'A race. After every shot you take, they take theirs.',
+    params: { goal: [5, 6, 7], shots: [9, 9, 10], rack: [15, 15, 15] },
+    setup(G, e) { e.layout = randomRack(G, e.p.rack); e.rivalScore = 0; e.rivalTurns = 0; },
+    progress(G, S, e) {
+      if (!e.rivalDef?.bankDouble) return S.counted;
+      return S.counted + S.pots.filter(p => p.counted && p.bank && !p.house).length;
+    },
+    objective: e => e.rivalDef ? `FIRST TO ${e.goal} — ${e.rivalDef.name} IS PLAYING` : `FIRST TO ${e.goal}`,
+  },
+  // a constructed puzzle with three attempts
+  trickshot: {
+    id: 'trickshot', name: 'TRICK TABLE', tag: 'PUZZLE', minFloor: 1, weight: 0,
+    blurb: 'One shot, set up just so. Three attempts. Take all the time you need.',
+    params: { goal: [1, 1, 1], shots: [3, 3, 3], rack: [0, 0, 0] },
+    setup(G, e) { G.buildTrick(e); },
+    progress(G, S, e) { return e.puzzle?.check(G, S, e) ? 1 : 0; },
+    afterShot(G, e) { G.resetTrick(e); },
+    objective: e => e.puzzle ? e.puzzle.hint.toUpperCase() : 'SOLVE THE TABLE',
+  },
+});
+
+// ----------------------------------------------------- AFTERHOURS bosses
+Object.assign(BOSSES, {
+  collector: {
+    id: 'collector', name: 'THE COLLECTOR', boss: true, jp: '収集家', cap: 3, gate: 'newtables',
+    blurb: 'Each phase it borrows one of your relics. Sink its COLLECTOR\'S ITEM to take one back and score 2.',
+    intro: 'EVERYTHING HAS A PRICE. I WILL TAKE YOURS.',
+    params: { goal: [5, 6, 7], shots: [9, 9, 10], rack: [15, 15, 15] },
+    color: '#d8b060',
+    setup(G, e) { e.layout = rackTriangle(G, e.p.rack); e.disabled = {}; G.collectorTake(e); G.later(1.2, () => G.collectorItem(e)); },
+    progress(G, S) { return S.counted + S.pots.filter(p => p.counted && p.ball.tags.item).length; },
+    afterShot(G, e, S) { G.afterCollector(e, S); },
+    onPhase(G, e) { G.collectorTake(e); },
+    phases: ['IT BORROWS ONE RELIC', 'IT BORROWS ANOTHER', 'IT BORROWS A THIRD'],
+    objective: e => `SINK ${e.goal} — IT KEEPS WHAT IT TAKES`,
+  },
+  architect: {
+    id: 'architect', name: 'THE ARCHITECT', boss: true, jp: '設計者', cap: 3, gate: 'newtables',
+    blurb: 'It builds walls across the felt between your shots. Pots off a wall pay extra.',
+    intro: 'I DREW THIS TABLE. EVERY LINE OF IT.',
+    params: { goal: [5, 6, 7], shots: [9, 9, 10], rack: [15, 15, 15] },
+    color: '#6ab0ff',
+    setup(G, e) { e.layout = rackTriangle(G, e.p.rack); G.later(1.0, () => G.architectBuild(e, 1)); },
+    afterShot(G, e) { G.architectBuild(e, e.phase >= 2 || e.bossPlus ? 2 : 1, e.phase >= 2); if (e.phase >= 3) G.architectSeal(e); },
+    phases: ['A WALL GOES UP', 'THE WALLS ARE REBUILT EVERY SHOT', 'A POCKET GETS BRICKED IN'],
+    objective: e => `SINK ${e.goal} — READ THE WALLS`,
+  },
+  bookie: {
+    id: 'bookie', name: 'THE BOOKIE', boss: true, jp: '胴元代理', cap: 3, gate: 'newtables',
+    blurb: 'Before every shot the Bookie offers a side bet. Take it with [B] or the button. Win it for extra progress, lose it and he takes one back.',
+    intro: 'EVERYTHING IS A WAGER. EVEN THIS.',
+    params: { goal: [6, 7, 8], shots: [9, 9, 10], rack: [15, 15, 15] },
+    color: '#b0ff5a',
+    setup(G, e) { e.layout = rackTriangle(G, e.p.rack); G.bookieOffer(e); },
+    afterShot(G, e) { G.bookieOffer(e); },
+    phases: ['OPTIONAL BETS', 'EVERY SECOND BET IS FORCED', 'THE STAKES DOUBLE'],
+    objective: e => `SINK ${e.goal} — THE BOOKIE ALWAYS HAS ODDS`,
+  },
+  // the secret one: only after closing time
+  owner: {
+    id: 'owner', name: 'THE OWNER', boss: true, jp: '店主', cap: 2, secret: true,
+    blurb: 'Every pocket you use closes behind you. Then the pattern changes. Then the lights go.',
+    intro: 'LAST GAME.',
+    params: { goal: [8, 8, 8], shots: [13, 13, 13], rack: [15, 15, 15] },
+    color: '#f0e6c8',
+    setup(G, e) { e.layout = rackTriangle(G, e.p.rack); e.closed = []; e.ownerOrder = []; },
+    counts(G, S, pot) { return G.ownerCounts(G.enc, S, pot); },
+    afterShot(G, e, S) { G.afterOwner(e, S); },
+    onPhase(G, e, n) { G.ownerPhase(e, n); },
+    phases: ['THE POCKET YOU USE CLOSES', 'THE PATTERN CHANGES', 'THE LIGHTS GO OUT'],
+    objective: e => e.lastGame ? 'THE 8. THE MARKED POCKET. NOTHING ELSE.' : e.phase >= 3 ? `SINK ${e.goal} — ONLY THE LIT BALL COUNTS` : `SINK ${e.goal} — POCKETS CLOSE BEHIND YOU`,
+  },
+});
+
 export function makeEncounter(def, floor, kind = 'table') {
   const f = Math.max(0, Math.min(2, floor - 1));
   const p = {};
@@ -315,8 +477,9 @@ export function makeEncounter(def, floor, kind = 'table') {
   return e;
 }
 
-export function pickEncounterTypes(floor, n = 2, exclude = []) {
-  const pool = Object.values(ENCOUNTERS).filter(d => d.weight > 0 && d.minFloor <= floor && !exclude.includes(d.id));
+// gateOk(name): whether this save has unlocked a content tier (Meta.unlocked)
+export function pickEncounterTypes(floor, n = 2, exclude = [], gateOk = () => true) {
+  const pool = Object.values(ENCOUNTERS).filter(d => d.weight > 0 && d.minFloor <= floor && !exclude.includes(d.id) && (!d.gate || gateOk(d.gate)));
   const out = [];
   while (out.length < n && pool.length) {
     const tot = pool.reduce((a, d) => a + d.weight, 0);

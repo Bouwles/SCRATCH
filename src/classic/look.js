@@ -11,6 +11,16 @@ export const FELTS = [
   { id: 'navy', name: 'Navy', felt: '#1c2d57', cushion: '#172649' },
   { id: 'blue', name: 'Tournament Blue', felt: '#1d5a8f', cushion: '#184c79' },
   { id: 'black', name: 'Black', felt: '#1d1d20', cushion: '#18181a' },
+  { id: 'red', name: 'Championship Red', felt: '#7a1a1e', cushion: '#661519' },
+  { id: 'teal', name: 'Teal', felt: '#12575c', cushion: '#0f494d' },
+  { id: 'slate', name: 'Slate Grey', felt: '#454a50', cushion: '#3a3e43' },
+];
+
+// the room around the table: same lounge, three interiors
+export const ROOMS = [
+  { id: 'lounge', name: 'The Lounge' },
+  { id: 'parlour', name: 'The Parlour' },
+  { id: 'loft', name: 'The Loft' },
 ];
 
 export const LIGHTS = [
@@ -40,6 +50,8 @@ export const CUES = [
   { id: 'ebony', name: 'Ebony', ach: 'hustler' },
   { id: 'ivory', name: 'Ivory Style' },
   { id: 'carbon', name: 'Carbon' },
+  { id: 'birdseye', name: 'Bird’s-eye Maple' },
+  { id: 'goldinlay', name: 'Gold Inlay', ach: 'tourney' },
 ];
 
 export const byId = (list, id) => list.find(x => x.id === id) || list[0];
@@ -245,6 +257,23 @@ function cueTex(id) {
     x.fillStyle = g; x.fillRect(0, 520, w, 478);
     band(980, 3, '#d8dce2');
     tipEnd('#1a1a1a', '#2f4e7a');
+  } else if (id === 'birdseye') {
+    // pale figured maple: the butt is covered in tiny 'eyes'
+    band(0, 12, '#0b0b0b'); band(12, 14, '#2a1a10');
+    woodBand(26, 505, '#d9b98a', '#a8825a', '#efd8b0', 61);
+    const r = rng(62);
+    for (let i = 0; i < 260; i++) { const ex = r() * w, ey = 30 + r() * 470; x.fillStyle = `rgba(90,60,30,${0.25 + r() * 0.3})`; x.beginPath(); x.ellipse(ex, ey, 1.2 + r() * 1.4, 0.8 + r(), 0, 0, 7); x.fill(); }
+    for (const y of [170, 395]) band(y, 4, '#2a1a10');
+    band(505, 15, '#e8dfc8'); band(509, 1, '#2a1a10');
+    shaft(); tipEnd();
+  } else if (id === 'goldinlay') {
+    band(0, 12, '#0b0b0b'); band(12, 14, '#c9a24a');
+    woodBand(26, 505, '#1a0e08', '#0a0503', '#2e1a10', 71);
+    points(399, 492, '#d8b060', '#6a4a18');
+    for (const y of [40, 170, 395, 470]) band(y, 3, '#d8b060');
+    for (let i = 0; i < 4; i++) { x.fillStyle = '#e8c878'; x.beginPath(); x.moveTo((i + 0.5) * w / 4, 250); x.lineTo((i + 0.5) * w / 4 + 5, 280); x.lineTo((i + 0.5) * w / 4, 310); x.lineTo((i + 0.5) * w / 4 - 5, 280); x.fill(); }
+    band(505, 15, '#d8b060'); band(510, 2, '#6a4a18');
+    shaft(); tipEnd('#f4f1e8', '#1a1a1a');
   } else {
     // classic wood: rosewood butt, maple points, black linen
     band(0, 12, '#0b0b0b'); band(12, 14, '#d9c9a0');
@@ -263,6 +292,6 @@ function cueTex(id) {
 }
 
 export function cueSkin(id) {
-  const shiny = id === 'carbon' ? { gloss: 0.9, shine: 90 } : id === 'ebony' ? { gloss: 0.85, shine: 80 } : { gloss: 0.6, shine: 60 };
+  const shiny = id === 'carbon' ? { gloss: 0.9, shine: 90 } : id === 'ebony' || id === 'goldinlay' ? { gloss: 0.85, shine: 80 } : { gloss: 0.6, shine: 60 };
   return { id: 'classic-' + id, texture: () => cueTex(id), mat: shiny };
 }

@@ -123,7 +123,7 @@ export class BallView {
       const casts = [];
       if (this.modern) for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(this.shadowGeo, this.castMat); casts.push(c); this.group.add(c); }
       // tag rings (target / forbidden)
-      v = { mesh, shadow, casts, mat, flash: 0, ring: null };
+      v = { mesh, shadow, casts, mat, flash: 0, ring: null, baseEmit: mat.uniforms.uEmissiveAmt.value };
       this.views.set(ball.id, v);
     }
     return v;
@@ -215,6 +215,7 @@ export class BallView {
       }
       v.flash = Math.max(0, v.flash - dt * 4);
       v.mat.uniforms.uFlash.value = v.flash;
+      if (this.glow || v.glowing) { v.mat.uniforms.uEmissiveAmt.value = v.baseEmit + (this.glow || 0) * (b.kind === 'cue' ? 0.6 : 1.4); v.glowing = this.glow > 0.001; }
       v.mat.uniforms.uOpacity.value = b.ghost > 0 && b.kind === 'cue' ? 0.55 : (this.skin.mat.opacity ?? 1);
       if (v.ring) {
         v.ring.visible = b.state === 'table';

@@ -2,8 +2,8 @@
 // Its own DOM layer (#classic) so it never shares a pixel with the club UI.
 
 import './classic.css';
-import { FELTS, LIGHTS, CUES, BALLS, byId } from './look.js';
-import { LEVELS } from './ai.js';
+import { FELTS, LIGHTS, CUES, BALLS, ROOMS, byId } from './look.js';
+import { LEVELS, STYLES } from './ai.js';
 import { SOLIDS, STRIPES } from './rules.js';
 import { GAME_VERSION } from '../game/meta.js';
 
@@ -120,6 +120,7 @@ export class ClassicUI {
     const defs = [
       ['VS AI', () => this.setupAI()],
       ['LOCAL VERSUS', () => this.setupLocal()],
+      ['TOURNAMENT', () => this.setupTourney()],
       ['PRACTICE', () => this.c.startMatch({ type: 'practice' })],
       null,
       ['APPEARANCE', () => this.appearance()],
@@ -233,37 +234,91 @@ export class ClassicUI {
     return { el, entry, close: () => this.close(entry) };
   }
 
+  clockRow(get, set) { return this.optRow('Shot clock', [0, 45, 30, 20], ['Off', '45 seconds', '30 seconds', '20 seconds'], get, set, 'Run out: ball in hand to your opponent'); }
+
   setupAI() {
     const d = this.c.data;
-    let name = d.names.p1, level = d.ai || 'normal', bestOf = d.bestOf || 1;
+    let name = d.names.p1, level = d.ai || 'normal', bestOf = d.bestOf || 1, style = d.style || 'balanced', clock = d.clock || 0;
     const lvDesc = { easy: 'Makes mistakes. Happy to leave you shots.', normal: 'A decent club player. Pots what’s in front of it.', hard: 'Plays position and spin. Will play safe.', expert: 'Plans ahead, rarely misses, controls the cue ball.' };
     const lvRow = this.optRow('Opponent', ['easy', 'normal', 'hard', 'expert'], ['Easy', 'Normal', 'Hard', 'Expert'], () => level, (v) => { level = v; desc.textContent = lvDesc[v]; });
     const desc = h('div', 'c-desc', lvDesc[level]);
+    const styRow = this.optRow('Playing style', Object.keys(STYLES), Object.values(STYLES).map(x => x.name), () => style, (v) => { style = v; sdesc.textContent = STYLES[v].desc; });
+    const sdesc = h('div', 'c-desc', STYLES[style].desc);
     const f = this.form('VS AI', [
       this.inputRow('Your name', name, (v) => { name = v; }),
       lvRow,
-      this.optRow('Frames', [1, 3, 5], ['Single frame', 'Best of 3', 'Best of 5'], () => bestOf, (v) => { bestOf = v; }),
+      styRow,
+      this.optRow('Frames', [1, 3, 5, 7], ['Single frame', 'Best of 3', 'Best of 5', 'Best of 7'], () => bestOf, (v) => { bestOf = v; }),
+      this.clockRow(() => clock, (v) => { clock = v; }),
     ], [
       ['Start match', () => {
-        d.names.p1 = (name || '').trim() || 'Player'; d.ai = level; d.bestOf = bestOf; this.c.save();
-        this.c.startMatch({ type: 'ai', names: [d.names.p1], level, bestOf });
+        d.names.p1 = (name || '').trim() || 'Player'; d.ai = level; d.bestOf = bestOf; d.style = style; d.clock = clock; this.c.save();
+        this.c.startMatch({ type: 'ai', names: [d.names.p1], level, bestOf, style, clock });
       }, 'primary'],
       ['Back', () => { this.g.audio.cUi('back'); f.close(); }],
-    ]);
-    f.el.querySelector('.c-rows').insertBefore(desc, lvRow.nextSibling);
+    ], { sub: 'Difficulty is how well it plays. Style is how it thinks.' });
+    const rowsEl = f.el.querySelector('.c-rows');
+    rowsEl.insertBefore(desc, lvRow.nextSibling);
+    rowsEl.insertBefore(sdesc, styRow.nextSibling);
+  }
+
+  setupTourney() {
+    const d = this.c.data;
+    let name = d.names.p1, level = d.ai || 'normal', bestOf = 1, clock = d.clock || 0;
+    const f = this.form('TOURNAMENT', [
+      this.inputRow('Your name', name, (v) => { name = v; }),
+      this.optRow('Field', ['easy', 'normal', 'hard', 'expert'], ['Easy', 'Normal', 'Hard', 'Expert'], () => level, (v) => { level = v; }, 'One of them is a notch better'),
+      this.optRow('Semi-final', [1, 3], ['Single frame', 'Best of 3'], () => bestOf, (v) => { bestOf = v; }, 'The final is always at least best of 3'),
+      this.clockRow(() => clock, (v) => { clock = v; }),
+    ], [
+      ['Draw the bracket', () => {
+        d.names.p1 = (name || '').trim() || 'Player'; this.c.save();
+        this.closeAll();
+        this.c.startTourney({ names: [d.names.p1], level, bestOf, clock });
+      }, 'primary'],
+      ['Back', () => { this.g.audio.cUi('back'); f.close(); }],
+    ], { sub: 'Four players. Two semi-finals. One final.' });
+  }
+
+  // the draw, before and after each round
+  bracket(T, next, reason = '') {
+    this.closeAll();
+    this.hud(false);
+    const g = this.g, f = T.field;
+    g.state = 'cmenu';
+    g.camMode = 'lounge';
+    const nm = (i) => (i == null ? '—' : esc(f[i].name) + (f[i].you ? '' : ` <small>${LEVELS[f[i].level].name[0] + LEVELS[f[i].level].name.slice(1).toLowerCase()} · ${STYLES[f[i].style].name}</small>`));
+    const win = (i) => (i != null && (T.winners.includes(i) || T.champion === i) ? ' won' : '');
+    const title = T.round === 'semi' ? 'The draw' : T.round === 'final' ? 'The final' : T.champion === 0 ? 'Champion' : 'Knocked out';
+    const el = h('div', 'c-screen c-side');
+    el.innerHTML = `<div class="c-col"><div class="c-title">${title.toUpperCase()}</div>${reason ? `<div class="c-subt">${esc(reason)}</div>` : ''}
+      <div class="c-bracket">
+        <div class="rd"><div class="lbl">Semi-final</div><div class="m"><div class="pl${win(0)}">${nm(0)}</div><div class="pl${win(1)}">${nm(1)}</div></div><div class="m"><div class="pl${win(2)}">${nm(2)}</div><div class="pl${win(3)}">${nm(3)}</div></div></div>
+        <div class="rd"><div class="lbl">Final</div><div class="m"><div class="pl${T.champion === T.winners[0] && T.champion != null ? ' won' : ''}">${nm(T.winners[0])}</div><div class="pl${T.champion === T.winners[1] && T.champion != null ? ' won' : ''}">${nm(T.winners[1])}</div></div></div>
+        <div class="rd"><div class="lbl">Champion</div><div class="m champ"><div class="pl won">${nm(T.champion)}</div></div></div>
+      </div>
+      <div class="c-btns"></div></div>`;
+    const row = el.querySelector('.c-btns');
+    const defs = next ? [[T.round === 'semi' ? 'Play your semi-final' : 'Play the final', next, 'primary'], ['Withdraw', () => this.c.toMenu()]] : [['Back to the lounge', () => this.c.toMenu(), 'primary']];
+    const items = defs.map(([t, , cls]) => { const b = h('div', 'c-btn' + (cls ? ' ' + cls : ''), t); row.appendChild(b); return b; });
+    let entry;
+    const nav = this.nav(items, (i) => { g.audio.cUi('select'); this.close(entry); defs[i][1](); });
+    entry = this.open(el, { keys: (code) => { if (code === 'Escape') { this.close(entry); this.c.toMenu(); return true; } return nav(code); } });
+    if (T.round === 'done' && T.champion === 0) g.audio.cWin();
   }
 
   setupLocal() {
     const d = this.c.data;
-    let n1 = d.names.p1, n2 = d.names.p2, bestOf = d.bestOf || 1;
+    let n1 = d.names.p1, n2 = d.names.p2, bestOf = d.bestOf || 1, clock = d.clock || 0;
     const f = this.form('LOCAL VERSUS', [
       this.inputRow('Player 1', n1, (v) => { n1 = v; }),
       this.inputRow('Player 2', n2, (v) => { n2 = v; }),
-      this.optRow('Frames', [1, 3, 5], ['Single frame', 'Best of 3', 'Best of 5'], () => bestOf, (v) => { bestOf = v; }),
+      this.optRow('Frames', [1, 3, 5, 7], ['Single frame', 'Best of 3', 'Best of 5', 'Best of 7'], () => bestOf, (v) => { bestOf = v; }),
+      this.clockRow(() => clock, (v) => { clock = v; }),
     ], [
       ['Start match', () => {
-        d.names.p1 = (n1 || '').trim() || 'Player 1'; d.names.p2 = (n2 || '').trim() || 'Player 2'; d.bestOf = bestOf; this.c.save();
-        this.c.startMatch({ type: 'local', names: [d.names.p1, d.names.p2], bestOf });
+        d.names.p1 = (n1 || '').trim() || 'Player 1'; d.names.p2 = (n2 || '').trim() || 'Player 2'; d.bestOf = bestOf; d.clock = clock; this.c.save();
+        this.c.startMatch({ type: 'local', names: [d.names.p1, d.names.p2], bestOf, clock });
       }, 'primary'],
       ['Back', () => { this.g.audio.cUi('back'); f.close(); }],
     ], { sub: 'Same table, same mouse. Take turns.' });
@@ -304,9 +359,10 @@ export class ClassicUI {
         const c = CUES.find(x => x.id === v);
         if (c.ach && !g.meta.data.achievements[c.ach]) { L.cue = v; c.lockedPreview = true; }
         set('cue', v);
-      }, 'Ebony: beat the Expert AI'),
+      }, 'Ebony: beat the Expert AI · Gold Inlay: win a tournament'),
       this.optRow('Balls', BALLS.map(x => x.id), BALLS.map(x => x.name), () => L.balls, (v) => set('balls', v)),
       this.optRow('Lighting', LIGHTS.map(x => x.id), LIGHTS.map(x => x.name), () => L.light, (v) => set('light', v)),
+      this.optRow('Room', ROOMS.map(x => x.id), ROOMS.map(x => x.name), () => L.room || 'lounge', (v) => set('room', v)),
     ], [['Done', () => { g.audio.cUi('back'); g.camMode = prev; f.close(); }]], {
       sub: 'Changes show on the table.',
       back: () => { g.audio.cUi('back'); g.camMode = prev; f.close(); },
@@ -319,8 +375,9 @@ export class ClassicUI {
     const pct = st.played ? Math.round(st.won / st.played * 100) : 0;
     const rows = [
       ['Matches played', st.played], ['Matches won', `${st.won}${st.played ? `  <small>${pct}%</small>` : ''}`], ['Current streak', st.streak], ['Best win streak', st.bestStreak],
-      ['Break and runs', st.breakRuns], ['Balls potted', st.potted], ['Longest pot', st.longest ? `${st.longest.toFixed(2)} m` : '—'],
-      ['Frames played', st.frames], ['Local matches', st.localMatches],
+      ['Frames played', st.frames], ['Frames won vs AI', st.framesWon || 0], ['Break and runs', st.breakRuns], ['Best run in one visit', st.highRun ? `${st.highRun} ball${st.highRun === 1 ? '' : 's'}` : '—'],
+      ['Balls potted', st.potted], ['Longest pot', st.longest ? `${st.longest.toFixed(2)} m` : '—'], ['Fouls', st.fouls || 0], ['Shot clock violations', st.clockFouls || 0],
+      ['Tournaments won', `${st.tourneys || 0}${st.tourneysPlayed ? ` <small>of ${st.tourneysPlayed}</small>` : ''}`], ['Local matches', st.localMatches],
     ];
     const lv = ['easy', 'normal', 'hard', 'expert'].map(k => `<div><span>${LEVELS[k].name[0] + LEVELS[k].name.slice(1).toLowerCase()}</span><b>${st.aiWins[k] || 0}</b></div>`).join('');
     el.innerHTML = `<div class="c-col"><div class="c-title">STATISTICS</div><div class="c-stats">${rows.map(([k, v]) => `<div class="k">${k}</div><div class="v">${v}</div>`).join('')}</div><div class="c-subh">Wins against the AI</div><div class="c-lv">${lv}</div><div class="c-btns"><div class="c-btn sel">Back</div></div></div>`;
@@ -412,11 +469,11 @@ export class ClassicUI {
     el.innerHTML = `<div class="c-endbox"><div class="t">${esc(info.title)}</div><div class="r">${esc(info.reason)}</div>${info.score ? `<div class="s">${esc(info.players[0].name)} <b>${info.score[0]}</b> — <b>${info.score[1]}</b> ${esc(info.players[1].name)}</div>` : ''}<div class="c-btns row"></div></div>`;
     const row = el.querySelector('.c-btns');
     const defs = [['Rematch', () => c.rematch()], ['Main menu', () => c.toMenu()], ['Return to roguelite', () => this.g.exitClassic()]];
-    const items = defs.map(([t]) => { const b = h('div', 'c-btn' + (t === 'Rematch' ? ' primary' : ''), t); row.appendChild(b); return b; });
+    const items = defs.map(([t]) => { const b = h('div', 'c-btn' + (t === 'Rematch' ? ' primary' : ''), t === 'Rematch' ? 'Rematch <small>R</small>' : t); row.appendChild(b); return b; });
     let entry;
     const nav = this.nav(items, (i) => { this.g.audio.cUi('select'); this.close(entry); defs[i][1](); });
     setTimeout(() => {
-      entry = this.open(el, { keys: (code) => { if (code === 'ArrowLeft') return nav('ArrowUp'); if (code === 'ArrowRight') return nav('ArrowDown'); return nav(code); } });
+      entry = this.open(el, { keys: (code) => { if (code === 'KeyR') { this.g.audio.cUi('select'); this.close(entry); c.rematch(); return true; } if (code === 'ArrowLeft') return nav('ArrowUp'); if (code === 'ArrowRight') return nav('ArrowDown'); return nav(code); } });
     }, 900);
   }
 
@@ -434,9 +491,10 @@ export class ClassicUI {
         <div class="c-spin"><div class="dot"></div></div>
         <div class="c-power"><i class="fill"></i><i class="cap"></i></div>
       </div>
-      <div class="c-hint"></div>`;
+      <div class="c-hint"></div>
+      <div class="c-clock"><i></i><span></span></div>`;
     const q = (s) => this.hudEl.querySelector(s);
-    this.hx = { board: q('.c-board'), practice: q('.c-practice'), p: [q('.p0'), q('.p1')], fr: q('.mid .fr'), lbl: q('.mid .lbl'), spin: q('.c-spin'), dot: q('.c-spin .dot'), fill: q('.c-power .fill'), cap: q('.c-power .cap'), hint: q('.c-hint'), power: q('.c-power'), ly: q('.c-practice .ly') };
+    this.hx = { clock: q('.c-clock'), board: q('.c-board'), practice: q('.c-practice'), p: [q('.p0'), q('.p1')], fr: q('.mid .fr'), lbl: q('.mid .lbl'), spin: q('.c-spin'), dot: q('.c-spin .dot'), fill: q('.c-power .fill'), cap: q('.c-power .cap'), hint: q('.c-hint'), power: q('.c-power'), ly: q('.c-practice .ly') };
     const setSpin = (e) => {
       const r = this.hx.spin.getBoundingClientRect();
       let x = ((e.clientX - r.left) / r.width) * 2 - 1, y = -(((e.clientY - r.top) / r.height) * 2 - 1);
@@ -490,6 +548,16 @@ export class ClassicUI {
     this.hx.dot.style.top = `${50 - g.spin.y * 36}%`;
     const busy = ['sim', 'shooting', 'cwait', 'cend'].includes(g.state);
     this.hx.hint.style.opacity = busy ? 0 : 1;
+    const m = this.c.match;
+    const clockOn = !!(m?.clock && this.c.isHumanTurn() && ['aim', 'charge', 'place'].includes(g.state));
+    this.hx.clock.classList.toggle('on', clockOn);
+  }
+
+  clock(frac, secs) {
+    const el = this.hx.clock;
+    el.querySelector('i').style.width = `${Math.max(0, frac) * 100}%`;
+    el.querySelector('span').textContent = `${secs}`;
+    el.classList.toggle('low', secs <= 5);
   }
 
   flashPower() { this.hx.power.classList.remove('flash'); void this.hx.power.offsetWidth; this.hx.power.classList.add('flash'); }

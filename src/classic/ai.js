@@ -29,6 +29,16 @@ export const LEVELS = {
   },
 };
 
+// How an opponent likes to play, separate from how well: the same hands,
+// different decisions.
+export const STYLES = {
+  balanced: { name: 'Balanced', desc: 'Takes the percentage shot. No surprises.' },
+  cautious: { name: 'Cautious', desc: 'Plays safe whenever a pot is doubtful. Hates leaving you anything.', miss: -430, safety: 170, oppW: 1.35 },
+  aggressive: { name: 'Aggressive', desc: 'Goes for everything, hits it hard, rarely plays safe.', miss: -170, safety: -380, pace: [1, 1.45, 1.9] },
+  positional: { name: 'Positional', desc: 'Thinks two shots ahead. Always wants the next ball easy.', pos: 1.7, lookahead: true },
+  trickster: { name: 'Trickster', desc: 'Loves a bank or a kick. Would rather be clever than safe.', banks: true, kicks: true, trick: 90 },
+};
+
 const OPP_SIGMA = 0.0065;          // assume a competent opponent when judging a leave
 export const BREAK_SPEED = 9.6;    // a full break is harder than any normal stroke
 
@@ -108,7 +118,9 @@ export const powerForSpeed = (v, max = PHYS.maxShotSpeed) => Math.pow(Math.max(0
 // A generator: yields after every simulated shot so the game can spread the
 // thinking over several frames. The final value is the chosen shot.
 export function* plan(ctx) {
-  const lv = LEVELS[ctx.level] || LEVELS.normal;
+  const base = LEVELS[ctx.level] || LEVELS.normal;
+  const sty = STYLES[ctx.style] || STYLES.balanced;
+  const lv = { ...base, position: base.position * (sty.pos || 1), lookahead: base.lookahead || !!sty.lookahead, banks: base.banks || !!sty.banks, kicks: base.kicks || !!sty.kicks };
   const phys = ctx.physics;
   const pockets = phys.pockets;
   const cue0 = phys.cue;
@@ -142,7 +154,7 @@ export function* plan(ctx) {
       return { v, out };
     }
     const opp = tableQuality(res.cue, res.balls, group ? otherGroup(group) : null, pockets, OPP_SIGMA);
-    return { v: -340 * opp.best - 60 * opp.second, out };
+    return { v: (-340 * opp.best - 60 * opp.second) * (sty.oppW || 1), out };
   };
   const st = { group, isBreak: false, onTable };
 
@@ -235,21 +247,21 @@ export function* plan(ctx) {
 
   let best = null;
   const consider = (shot, v, p) => { if (!best || v > best.v) best = { ...shot, v, p }; };
-  const MISS = -300;
+  const MISS = sty.miss ?? -300;
 
   for (const cd of top) {
     // banks need their line found on the real cushions: try a few fine offsets
     const offsets = cd.kind === 'bank' ? [0, 0.004, -0.004, 0.009, -0.009] : [0];
     for (const off of offsets) {
       for (const spin of lv.spins) {
-        for (const k of [1, 1.45]) {
+        for (const k of sty.pace || [1, 1.45]) {
           const shot = { angle: cd.angle + off, speed: Math.min(PHYS.maxShotSpeed * 0.92, cd.pace * k * (spin.top < 0 ? 1.25 : 1)), top: spin.top, side: spin.side, kind: cd.kind, target: cd.T.num };
           const res = sim.run(shot, c);
           yield 1;
           const s = score(res, st);
           const made = res.pots.includes(cd.T.num) && !s.out.foul && !s.out.lose;
           const p = made ? cd.p : cd.p * 0.15;
-          consider(shot, p * s.v + (1 - p) * MISS, p);
+          consider(shot, p * s.v + (1 - p) * MISS + (cd.kind === 'bank' ? sty.trick || 0 : 0), p);
         }
       }
       if (cd.kind === 'bank' && best?.target === cd.T.num && best.p > 0.1) break;
@@ -257,7 +269,7 @@ export function* plan(ctx) {
   }
 
   // ---- 2. safeties when the pot is a gamble
-  const wantSafety = lv.safety && (!best || best.v < (lv.safety === 'full' ? 120 : -60));
+  const wantSafety = lv.safety && (!best || best.v < (lv.safety === 'full' ? 120 : -60) + (sty.safety || 0));
   if (wantSafety || !best) {
     const targets = balls.filter(b => b.kind !== 'cue' && legal.has(b.num)).sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z)).slice(0, lv.safety === 'full' ? 4 : 2);
     for (const T of targets) {
@@ -287,7 +299,7 @@ export function* plan(ctx) {
           const res = sim.run(shot, c);
           yield 1;
           const s = score(res, st);
-          consider(shot, s.v, 1);
+          consider(shot, s.v + (sty.trick ? sty.trick * 0.5 : 0), 1);
         }
       }
     }

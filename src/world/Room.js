@@ -44,12 +44,16 @@ export class Room {
     this.smoke = [];
     this.cheer = 0;
     this.lightning = 0;
+    this.mood = 'calm';
+    this.props = [];         // things that shake when the table takes a hit
+    this.flags = {};         // menu personality: what this save has done
+    this.clockText = null;
   }
 
   build(theme, liveFeedTex) {
     this.theme = theme;
     disposeTree(this.group);
-    this.anim = []; this.screens = []; this.spectators = []; this.smoke = [];
+    this.anim = []; this.screens = []; this.spectators = []; this.smoke = []; this.props = [];
     this.liveFeedTex = liveFeedTex;
     const r = rng(theme.seed);
     this.r = r;
@@ -69,10 +73,158 @@ export class Room {
     if (theme.props === 'aquarium') this.propsAquarium(theme);
     if (theme.props === 'arcade') this.propsArcade(theme);
     if (theme.props === 'void') this.propsVoidExtras(theme);
+    if (theme.props === 'afterhours') this.propsAfterhours(theme);
+    if (theme.props === 'rajis') this.propsRajis(theme);
+    if (!['afterhours', 'rajis', 'void'].includes(theme.props)) this.personality(theme);
 
-    this.buildSpectators(theme);
+    if (theme.props !== 'afterhours') this.buildSpectators(theme);
     this.buildSmoke(theme);
   }
+
+  // ---------------------------------------------------- AFTERHOURS
+  // the same club after everyone has gone: chairs up, one lamp, a wrong clock
+  propsAfterhours(theme) {
+    const [s1, s2, s3] = theme.signs;
+    const off = this.neonSign(s1[0], s1[1], -1.0, 1.5, -RZ + 0.08, 0, 1.3);
+    this.neonSign(s2[0], s2[1], 1.3, 1.55, -RZ + 0.08, 0, 0.8);
+    this.neonSign(s3[0], s3[1], -RX + 0.08, 1.3, 1.4, Math.PI / 2, 1.0);
+    this.anim.push((dt, t) => { if (Math.sin(t * 0.7) > 0.96) off.material.uniforms.uOpacity.value = 0.1; });
+    this.poster(1, -1.9, 0.5, -RZ + 0.03, 0);
+    this.poster(4, 1.9, 0.45, -RZ + 0.03, 0);
+    this.bar(theme);
+    this.cabinet(RX - 0.5, -0.4, -Math.PI / 2, '#401030', 'static');
+    this.wallClock(RX - 0.03, 1.35, -1.6, -Math.PI / 2, 1.3, true);
+    // other tables in the dark with chairs stacked on top
+    const tableMat = ps1Material({ color: 0x1a120c }), feltMat = ps1Material({ color: 0x0c2a18 }), chairMat = ps1Material({ color: 0x3a1010 });
+    for (const [x, z, ry] of [[-3.3, -2.2, 0.1], [3.3, 2.4, -0.2], [-3.2, 2.5, 0.05]]) {
+      const g = new THREE.Group();
+      const top = box(1.5, 0.12, 0.85, tableMat); top.position.y = FLOOR_Y + 0.72; g.add(top);
+      const felt = box(1.35, 0.01, 0.7, feltMat); felt.position.y = FLOOR_Y + 0.785; g.add(felt);
+      for (const [lx, lz] of [[-0.6, -0.3], [0.6, -0.3], [-0.6, 0.3], [0.6, 0.3]]) { const leg = box(0.1, 0.66, 0.1, tableMat); leg.position.set(lx, FLOOR_Y + 0.33, lz); g.add(leg); }
+      for (const cx of [-0.35, 0.35]) {
+        const seat = box(0.4, 0.05, 0.4, chairMat); seat.position.set(cx, FLOOR_Y + 1.12, 0); seat.rotation.z = Math.PI; g.add(seat);
+        for (const [lx, lz] of [[-0.17, -0.17], [0.17, -0.17], [-0.17, 0.17], [0.17, 0.17]]) { const l = box(0.04, 0.42, 0.04, chairMat); l.position.set(cx + lx, FLOOR_Y + 1.34, lz); g.add(l); }
+      }
+      g.position.set(x, 0, z); g.rotation.y = ry;
+      this.group.add(g);
+    }
+    // a mop bucket, still wet
+    const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.3, 7), ps1Material({ color: 0xb0a020 }));
+    bucket.position.set(2.5, FLOOR_Y + 0.15, -1.9);
+    const mop = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1.3, 4), ps1Material({ color: 0x806040 }));
+    mop.position.set(2.55, FLOOR_Y + 0.6, -1.9); mop.rotation.z = 0.25;
+    this.group.add(bucket, mop);
+    this.anim.push((dt, t) => { mop.rotation.z = 0.25 + Math.sin(t * 0.9) * 0.05; });
+  }
+
+  // a wall clock: real time, unless this save knows better
+  wallClock(x, y, z, ry, s = 1, always = false) {
+    const c = canvas(32, 32), cx = c.getContext('2d');
+    const tex = toTex(c, { wrap: false });
+    const face = new THREE.Mesh(new THREE.CircleGeometry(0.2 * s, 16), ps1Material({ map: tex, unlit: true, fog: 0.4 }));
+    face.position.set(x, y, z); face.rotation.y = ry;
+    const rim = new THREE.Mesh(new THREE.RingGeometry(0.2 * s, 0.23 * s, 16), ps1Material({ color: 0x302820 }));
+    rim.position.set(x, y, z); rim.rotation.y = ry;
+    this.group.add(face, rim);
+    let last = '';
+    this.anim.push(() => {
+      const d = new Date();
+      const txt = always ? '03:77' : this.clockText || `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      if (txt === last) return;
+      last = txt;
+      cx.fillStyle = '#f0e8d8'; cx.beginPath(); cx.arc(16, 16, 16, 0, 7); cx.fill();
+      cx.fillStyle = txt === '03:77' ? '#c01818' : '#1a1410';
+      cx.font = 'bold 8px "Press Start 2P", monospace'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText(txt.slice(0, 2), 16, 11); cx.fillText(txt.slice(3), 16, 21);
+      tex.needsUpdate = true;
+    });
+    this.props.push({ m: face, base: face.rotation.z, amp: 0 }, { m: rim, base: rim.rotation.z, amp: 0 });
+  }
+
+  // what this save has done shows up in the club (menu personality)
+  personality(theme) {
+    const f = this.flags || {};
+    if (f.champion) this.poster(6, RX - 0.03, 0.55, -0.9, -Math.PI / 2, 1.1);
+    if (f.heat5) {
+      const lamp = this.neonSign('HEAT V', '#ff3010', -RX + 0.08, 1.75, -1.6, Math.PI / 2, 0.7);
+      this.anim.push((dt, t) => { lamp.material.uniforms.uOpacity.value = 0.75 + Math.sin(t * 3) * 0.25; });
+    }
+    if (f.clock) this.wallClock(-RX + 0.03, 1.6, 2.4, Math.PI / 2, 0.9);
+    if (f.radar) {
+      const dot = new THREE.Mesh(new THREE.CircleGeometry(0.035, 8), ps1Material({ color: 0x8fd14f, unlit: true, fog: 0.2 }));
+      dot.position.set(RX - 0.03, 0.2, 2.9); dot.rotation.y = -Math.PI / 2;
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3), ps1Material({ map: glowTexture(), additive: true, unlit: true, color: 0x2a4a14 }));
+      glow.position.set(RX - 0.035, 0.2, 2.9); glow.rotation.y = -Math.PI / 2;
+      this.group.add(dot, glow);
+      this.anim.push((dt, t) => { const on = (t % 2.4) < 0.18; dot.visible = on; glow.visible = on; });
+    }
+  }
+
+  // ---------------------------------------------------------- RAJIS
+  // one command room, dressed for wherever the mission is
+  propsRajis(theme) {
+    const [s1, s2, s3] = theme.signs;
+    this.neonSign(s1[0], s1[1], -1.1, 1.72, -RZ + 0.08, 0, 1.0);
+    this.neonSign(s2[0], s2[1], 1.5, 1.72, -RZ + 0.08, 0, 0.8);
+    this.neonSign(s3[0], s3[1], RX - 0.08, 1.6, 0, -Math.PI / 2, 0.9);
+    // a wall of screens: radar, maps, static
+    const kinds = ['radar', 'map', 'radar', 'static', 'map', 'radar'];
+    for (let i = 0; i < 6; i++) this.crt(-2.3 + (i % 3) * 0.55, FLOOR_Y + 0.95 + Math.floor(i / 3) * 0.45, -RZ + 0.35, 0, kinds[i], 1.0);
+    for (let i = 0; i < 3; i++) this.crt(RX - 0.5, FLOOR_Y + 0.4 + i * 0.45, -1.8 + i * 0.1, -Math.PI / 2, i === 1 ? 'live' : 'radar', 1.0);
+    // consoles along the side walls
+    const consoleMat = ps1Material({ color: 0x1c221a });
+    for (const z of [-1.4, -0.4, 0.6, 1.6]) {
+      const c = box(0.6, 0.9, 0.8, consoleMat); c.position.set(-RX + 0.4, FLOOR_Y + 0.45, z); this.group.add(c);
+      const sc = animatedScreen(z > 0 ? 'radar' : 'map', Math.floor(this.r() * 99)); this.screens.push(sc);
+      const panel = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.35), ps1Material({ map: sc.tex, unlit: true, fog: 0.2 }));
+      panel.position.set(-RX + 0.71, FLOOR_Y + 0.95, z); panel.rotation.y = Math.PI / 2; panel.rotation.x = -0.3;
+      this.group.add(panel);
+    }
+    // rotating warning beacons
+    for (const [x, z] of [[-RX + 0.3, -RZ + 0.3], [RX - 0.3, -RZ + 0.3], [RX - 0.3, RZ - 0.3], [-RX + 0.3, RZ - 0.3]]) {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.1, 6), ps1Material({ color: 0x202020 }));
+      base.position.set(x, CEIL - 0.1, z);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 4), ps1Material({ color: 0xff2010, unlit: true, fog: 0.2 }));
+      bulb.position.set(x, CEIL - 0.2, z);
+      const beam = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.35), ps1Material({ map: glowTexture(), additive: true, unlit: true, color: 0x801008, side: THREE.DoubleSide }));
+      beam.position.set(x, CEIL - 0.2, z);
+      this.group.add(base, bulb, beam);
+      const ph = this.r() * 6;
+      this.anim.push((dt, t) => { beam.rotation.y = t * 3 + ph; beam.material.uniforms.uOpacity.value = this.alarm ? 1 : 0.35; });
+    }
+    // hazard stripes on the floor around the table
+    const hz = canvas(32, 8), hx = hz.getContext('2d');
+    for (let i = -8; i < 40; i += 8) { hx.fillStyle = '#f5c542'; hx.beginPath(); hx.moveTo(i, 8); hx.lineTo(i + 4, 0); hx.lineTo(i + 8, 0); hx.lineTo(i + 4, 8); hx.fill(); }
+    const ht = toTex(hz); ht.repeat.set(10, 1);
+    for (const [w, x, z, ry] of [[3.4, 0, -1.3, 0], [3.4, 0, 1.3, 0], [2.6, -1.75, 0, Math.PI / 2], [2.6, 1.75, 0, Math.PI / 2]]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.1), ps1Material({ map: ht, transparent: true, color: 0x806020 }));
+      m.rotation.x = -Math.PI / 2; m.rotation.z = ry; m.position.set(x, FLOOR_Y + 0.012, z);
+      this.group.add(m);
+    }
+    // the view outside (or the missile, in the silo)
+    if (theme.view === 'silo') {
+      const missile = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 3.2, 10), ps1Material({ color: 0xd8d8d0 }));
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 10), ps1Material({ color: 0xc02020 }));
+      nose.position.y = 2.0;
+      for (let i = 0; i < 4; i++) { const fin = box(0.04, 0.6, 0.5, ps1Material({ color: 0x303830 })); fin.position.y = -1.3; fin.rotation.y = i * Math.PI / 2; fin.position.x = Math.cos(i * Math.PI / 2) * 0.35; fin.position.z = Math.sin(i * Math.PI / 2) * 0.35; missile.add(fin); }
+      missile.add(body, nose);
+      missile.position.set(2.6, 0.6, -RZ + 0.9);
+      this.group.add(missile);
+      this.props.push({ m: missile, base: 0, amp: 0 });
+    } else if (theme.view !== 'screens') {
+      [-3.1, 3.1].forEach((x, i) => this.window(theme, x, -RZ + 0.02, 0, i));
+    }
+    const table = box(1.2, 0.08, 0.8, ps1Material({ color: 0x2a3020 }));
+    table.position.set(-2.7, FLOOR_Y + 0.8, 2.3);
+    const map = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.7), ps1Material({ map: animatedScreen('map', 7).tex, unlit: true }));
+    map.rotation.x = -Math.PI / 2; map.position.set(-2.7, FLOOR_Y + 0.85, 2.3);
+    this.group.add(table, map);
+  }
+
+  setMood(m) { this.mood = m || 'calm'; }
+  // posters, clocks and signs rattle when the table takes a big hit
+  shakeProps(k = 1) { for (const p of this.props) p.amp = Math.min(0.2, p.amp + 0.05 * k); }
 
   // ------------------------------------------------------------------ shell
   buildShell(theme) {
@@ -147,6 +299,13 @@ export class Room {
       const f = 0.7 + this.lightning * 1.8;
       back.material.uniforms.uColor.value.setRGB(f * 0.8, f * 0.82, f * 0.9);
     });
+    if (theme.windows === 'snow') {
+      const st = rainTexture();
+      st.repeat.set(2, 1);
+      const snow = new THREE.Mesh(new THREE.PlaneGeometry(w, h), ps1Material({ map: st, additive: true, unlit: true, scroll: [0.08, 0.35], fog: 0.2, color: 0xd0e0ff }));
+      snow.position.z = 0.02;
+      g.add(snow);
+    }
     if (theme.windows === 'rain' || theme.windows === 'city') {
       const rt = rainTexture();
       rt.repeat.set(3, 1.5);
@@ -215,6 +374,7 @@ export class Room {
     m.position.set(x, y, z); m.rotation.y = ry;
     m.rotation.z = (this.r() - 0.5) * 0.08;
     this.group.add(m);
+    this.props.push({ m, base: m.rotation.z, amp: 0 });
   }
 
   crt(x, y, z, ry, kind, s = 1) {
@@ -577,6 +737,7 @@ export class Room {
   }
 
   cheerNow(amount = 1) {
+    if (this.mood === 'quiet') return;
     for (const s of this.spectators) {
       if (Math.random() < 0.35 + amount * 0.5) {
         s.jv = 1.2 + Math.random() * 1.2 * amount;
@@ -593,15 +754,31 @@ export class Room {
       this.lightning = 1;
       this.lights.flash(new THREE.Vector3(0, 1.5, -3.5), 0xb0c0ff, 7, 2.2, 0.35);
     }
+    // the crowd reads the table: leaning in when it is tense, bouncing when you are on fire,
+    // heads down and silent in QUIET HOURS
+    const mood = this.mood;
     for (const s of this.spectators) {
       s.jv -= 9 * dt;
       s.jump = Math.max(0, s.jump + s.jv * dt);
       if (s.jump === 0 && s.jv < 0) s.jv = 0;
-      s.g.position.y = s.baseY + s.jump + (this.theme.props === 'void' ? Math.sin(t * 0.7 + s.ph) * 0.1 : 0);
-      s.g.rotation.z = Math.sin(t * 0.9 + s.ph) * 0.03;
+      const hype = mood === 'hype' ? Math.max(0, Math.sin(t * 7 + s.ph)) * 0.03 : 0;
+      const sink = mood === 'quiet' ? -0.12 : 0;
+      s.g.visible = true;
+      s.g.position.y = s.baseY + s.jump + hype + sink + (this.theme.props === 'void' ? Math.sin(t * 0.7 + s.ph) * 0.1 : 0);
+      s.g.rotation.z = Math.sin(t * (mood === 'hype' ? 2.4 : 0.9) + s.ph) * (mood === 'tense' || mood === 'quiet' ? 0.005 : 0.03);
+      const lean = mood === 'tense' ? 0.2 : mood === 'quiet' ? 0.35 : 0;
+      s.lean = (s.lean || 0) + (lean - (s.lean || 0)) * Math.min(1, dt * 3);
+      s.g.children[0].rotation.x = s.lean * 0.4;
+      s.g.children[2].position.z = s.lean * 0.12;
       s.cheer = Math.max(0, (s.cheer || 0) - dt);
+      if (mood === 'quiet') s.cheer = 0;
       const up = s.cheer > 0 ? Math.PI * 0.85 + Math.sin(t * 14 + s.ph) * 0.3 : 0.1 + Math.sin(t * 1.3 + s.ph) * 0.05;
       s.arms.forEach((a, i) => { a.rotation.z += ((i ? -up : up) * -1 - a.rotation.z) * Math.min(1, dt * 12); });
+    }
+    for (const p of this.props) {
+      if (!p.amp) continue;
+      p.amp = Math.max(0, p.amp - dt * 0.25);
+      p.m.rotation.z = p.base + Math.sin(t * 23 + p.base * 50) * p.amp;
     }
     for (const s of this.smoke) {
       s.m.position.set(s.x + Math.sin(t * s.sp + s.ph) * 0.6, s.y + Math.sin(t * s.sp * 0.7 + s.ph) * 0.2, s.z + Math.cos(t * s.sp + s.ph) * 0.6);

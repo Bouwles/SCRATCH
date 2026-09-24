@@ -11,7 +11,15 @@ import { ClassicAim } from './aim.js';
 import { ClassicUI } from './ClassicUI.js';
 import { FELTS, LIGHTS, CUES, byId, tableTheme, ballSkin, cueSkin } from './look.js';
 import { evaluate, groupOf, otherGroup, legalTargets, SOLIDS, STRIPES } from './rules.js';
-import { plan, execute, LEVELS, powerForSpeed, BREAK_SPEED } from './ai.js';
+import { plan, execute, LEVELS, STYLES, powerForSpeed, BREAK_SPEED } from './ai.js';
+
+// the four-player house tournament: you and three regulars
+const REGULARS = [
+  { name: 'Marguerite', style: 'positional' }, { name: 'Ossie', style: 'aggressive' }, { name: 'Deacon', style: 'cautious' },
+  { name: 'Juno', style: 'trickster' }, { name: 'Rafe', style: 'aggressive' }, { name: 'Ilse', style: 'positional' },
+  { name: 'Tobias', style: 'cautious' }, { name: 'Nell', style: 'balanced' },
+];
+const STRENGTH = { easy: 1, normal: 2, hard: 3, expert: 4 };
 
 const R = TABLE.R;
 
@@ -107,7 +115,7 @@ export class Classic {
     const light = byId(LIGHTS, d.light);
     g.table.build(tableTheme(d.felt));
     g.table.lampGroup.visible = false;
-    if (rebuildRoom || !this.lounge.group.children.length) this.lounge.build(light);
+    if (rebuildRoom || !this.lounge.group.children.length || this.lounge.roomId !== (d.room || 'lounge')) this.lounge.build(light, d.room || 'lounge');
     else this.lounge.setLighting(light);
     shared.uAmbient.value.setRGB(...light.ambient);
     shared.uSky.value.setRGB(...light.sky);
@@ -171,7 +179,10 @@ export class Classic {
   }
 
   // ============================================================ matches
-  aiName(level) { return `${LEVELS[level].name[0]}${LEVELS[level].name.slice(1).toLowerCase()} AI`; }
+  aiName(level, style = 'balanced') {
+    const lv = `${LEVELS[level].name[0]}${LEVELS[level].name.slice(1).toLowerCase()} AI`;
+    return style && style !== 'balanced' ? `${lv} · ${STYLES[style].name}` : lv;
+  }
 
   startMatch(cfg) {
     const g = this.g;
@@ -179,13 +190,13 @@ export class Classic {
     const cue = CUES.find(c => c.id === this.data.look.cue);
     if (cue?.ach && !g.meta.data.achievements[cue.ach]) { this.data.look.cue = 'wood'; this.save(); g.cue.setSkin(cueSkin('wood')); }
     const players = cfg.type === 'ai'
-      ? [{ name: cfg.names[0] || 'Player', ai: false }, { name: this.aiName(cfg.level), ai: true }]
+      ? [{ name: cfg.names[0] || 'Player', ai: false }, { name: cfg.oppName || this.aiName(cfg.level, cfg.style), ai: true, style: cfg.style || 'balanced' }]
       : cfg.type === 'local' ? [{ name: cfg.names[0] || 'Player 1', ai: false }, { name: cfg.names[1] || 'Player 2', ai: false }]
       : [{ name: 'Practice', ai: false }];
     this.match = {
-      type: cfg.type, level: cfg.level || 'normal', bestOf: cfg.bestOf || 1,
+      type: cfg.type, level: cfg.level || 'normal', bestOf: cfg.bestOf || 1, clock: cfg.type === 'practice' ? 0 : cfg.clock || 0,
       players: players.map(p => ({ ...p, group: null })), wins: [0, 0], frame: 0, breaker: 0, turn: 0,
-      inHand: false, kitchen: false, isBreak: false, layout: 'rack',
+      inHand: false, kitchen: false, isBreak: false, layout: 'rack', tourney: cfg.tourney || null, visit: 0, clockLeft: 0,
     };
     this.paused = false;
     this.ui.closeAll();
@@ -204,7 +215,7 @@ export class Classic {
     this.ui.matchIntro(this.match, () => this.startFrame());
   }
 
-  rematch() { this.startMatch(this.cfg); }
+  rematch() { if (this.cfg?.tourney) { this.toMenu(); return; } this.startMatch(this.cfg); }
 
   startFrame() {
     const g = this.g, m = this.match;
@@ -261,6 +272,8 @@ export class Classic {
     const cue = g.physics.cue;
     if (!cue || cue.state !== 'table') this.respawnCue();
     this.aim.showHead(m.inHand && m.kitchen);
+    m.clockLeft = m.clock;
+    m.clockTick = Math.ceil(m.clock);
     if (m.type !== 'practice' && p.ai) { this.startAI(); return; }
     g.charge = 0;
     if (m.inHand && !m.isBreak) {
@@ -502,6 +515,11 @@ export class Classic {
     m.isBreak = false;
     if (scratch) this.respawnCue();
     const before = m.turn;
+    if (!p.ai) {
+      const st = this.data.stats;
+      if (out.foul) st.fouls = (st.fouls || 0) + 1;
+      else if (out.continueTurn) { m.visit += r.potBalls.filter(b => b.kind !== 'cue').length; st.highRun = Math.max(st.highRun || 0, m.visit); }
+    }
     if (out.foul) {
       m.turn = 1 - m.turn;
       m.inHand = true;
@@ -513,7 +531,7 @@ export class Classic {
       m.turn = 1 - m.turn;
       m.inHand = false;
     }
-    if (m.turn !== before) m.breakRun = false;
+    if (m.turn !== before) { m.breakRun = false; m.visit = 0; }
     this.ui.updateHUD();
     const delay = out.foul ? 1.9 : wasBreak ? 0.9 : 0.55;
     g.state = 'cwait';
@@ -530,6 +548,7 @@ export class Classic {
     m.wins[winner]++;
     const st = this.data.stats;
     st.frames++;
+    if (!w.ai && m.type === 'ai') st.framesWon = (st.framesWon || 0) + 1;
     if (winner === m.breakerNow && m.breakRun && !w.ai) { st.breakRuns++; reason = 'Break and run.'; }
     this.save();
     this.ui.updateHUD();
@@ -568,7 +587,51 @@ export class Classic {
       } else st.streak = 0;
     } else { st.localMatches++; earn('classic_win'); }
     this.save();
+    if (m.tourney) { this.tourneyResult(winner === 0, reason); return; }
     this.ui.matchEnd({ title: `${w.name} wins`, reason, score: m.bestOf > 1 ? m.wins : null, players: m.players });
+  }
+
+  // ============================================================ tournament
+  // four players, two semi-finals, one final. The other semi is played out of sight.
+  startTourney(cfg) {
+    const pool = shuffle([...REGULARS]).slice(0, 3);
+    const lv = cfg.level;
+    const up = { easy: 'normal', normal: 'hard', hard: 'expert', expert: 'expert' }[lv];
+    const field = [
+      { name: cfg.names[0] || 'Player', you: true },
+      { ...pool[0], level: lv }, { ...pool[1], level: lv }, { ...pool[2], level: up },
+    ];
+    this.tourney = { field, round: 'semi', semis: [[0, 1], [2, 3]], winners: [null, null], champion: null, cfg };
+    this.data.stats.tourneysPlayed = (this.data.stats.tourneysPlayed || 0) + 1;
+    this.save();
+    this.ui.bracket(this.tourney, () => this.tourneyMatch());
+  }
+  tourneyMatch() {
+    const T = this.tourney, f = T.field;
+    const oppIdx = T.round === 'semi' ? 1 : T.winners[1];
+    const o = f[oppIdx];
+    this.startMatch({ type: 'ai', names: [f[0].name], level: o.level, style: o.style, oppName: o.name, bestOf: T.round === 'final' ? Math.max(3, T.cfg.bestOf) : T.cfg.bestOf, clock: T.cfg.clock, tourney: T });
+  }
+  tourneyResult(won, reason) {
+    const T = this.tourney, g = this.g;
+    if (T.round === 'semi') {
+      T.winners[0] = won ? 0 : 1;
+      // the other semi: the stronger player usually wins, not always
+      const [a, b] = T.semis[1], sa = STRENGTH[T.field[a].level], sb = STRENGTH[T.field[b].level];
+      T.winners[1] = Math.random() < sa / (sa + sb) ? a : b;
+      T.round = won ? 'final' : 'done';
+      if (!won) { const fa = T.winners[0], fb = T.winners[1]; const s1 = STRENGTH[T.field[fa].level], s2 = STRENGTH[T.field[fb].level]; T.champion = Math.random() < s1 / (s1 + s2) ? fa : fb; }
+    } else {
+      T.round = 'done';
+      T.champion = won ? 0 : T.winners[1];
+      if (won) {
+        this.data.stats.tourneys = (this.data.stats.tourneys || 0) + 1;
+        const a = g.meta.achieve('tourney');
+        if (a) this.ui.achievement(a.name);
+      }
+    }
+    this.save();
+    g.after(1.4, () => this.ui.bracket(T, T.round === 'final' ? () => this.tourneyMatch() : null, reason));
   }
 
   // ============================================================ AI
@@ -581,7 +644,7 @@ export class Classic {
     this.ui.hint('');
     const lv = LEVELS[m.level];
     this.ai = {
-      gen: plan({ physics: g.physics, group: p.group, isBreak: m.isBreak, inHand: m.inHand, kitchen: m.kitchen, level: m.level }),
+      gen: plan({ physics: g.physics, group: p.group, isBreak: m.isBreak, inHand: m.inHand, kitchen: m.kitchen, level: m.level, style: p.style }),
       t: 0, min: lv.think[0] + Math.random() * (lv.think[1] - lv.think[0]), result: null,
     };
   }
@@ -712,8 +775,31 @@ export class Classic {
     const g = this.g;
     this.lounge.update(dt, g.camera, ['lounge', 'showcase', 'intro', 'end'].includes(g.camMode));
     if (this.ai) this.updateAI(dt);
+    this.tickClock(dt);
     if (g.state !== 'place' && !(g.state === 'aim' && this.match?.inHand)) this.aim.hidePlace();
     this.ui.update(dt);
+  }
+
+  // SHOT CLOCK: run out of time and it is a foul, ball in hand to the other player
+  tickClock(dt) {
+    const g = this.g, m = this.match;
+    if (!m || !m.clock || this.paused || this.ui.modalOpen() || !this.isHumanTurn() || !['aim', 'charge', 'place'].includes(g.state)) return;
+    m.clockLeft -= dt;
+    const n = Math.ceil(m.clockLeft);
+    if (n !== m.clockTick) { m.clockTick = n; if (n <= 5 && n > 0) g.audio.cUi('move'); }
+    this.ui.clock(m.clockLeft / m.clock, Math.max(0, n));
+    if (m.clockLeft > 0) return;
+    g.state = 'cwait';
+    g.charge = 0;
+    this.aim.hide(); this.aim.hidePlace();
+    g.cue.visible = false;
+    const st = this.data.stats;
+    st.clockFouls = (st.clockFouls || 0) + 1; st.fouls = (st.fouls || 0) + 1;
+    this.save();
+    m.turn = 1 - m.turn; m.inHand = true; m.kitchen = false; m.isBreak = false; m.breakRun = false; m.visit = 0;
+    this.ui.foul('Shot clock', `Ball in hand · ${m.players[m.turn].name}`);
+    g.audio.cFoul();
+    g.after(1.9, () => { if (this.match === m) this.beginTurn(); });
   }
 
   onKey(code) {

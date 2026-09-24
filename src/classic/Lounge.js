@@ -51,16 +51,23 @@ const floorTex = () => tex(1024, 1024, (x, w, h) => {
   noise(x, w, h, 0.06, 5);
 });
 
-const rugTex = () => tex(1024, 736, (x, w, h) => {
-  x.fillStyle = '#3e1216'; x.fillRect(0, 0, w, h);
+// three interiors for the same room
+export const ROOM_STYLES = {
+  lounge: { fabric: '#2a3a31', rug: ['#3e1216', '#171c2c', '#9a7440'], curtain: [62, 16, 22], leather: '#4a1c14', wood: 0xffffff, floor: 0xffffff },
+  parlour: { fabric: '#1b2a44', damask: true, rug: ['#16281c', '#3a1418', '#b08a4a'], curtain: [20, 42, 32], leather: '#1f3a2a', wood: 0xd8b898, floor: 0xe0d0c0 },
+  loft: { fabric: '#6a3424', brick: true, rug: ['#2a2a2c', '#141416', '#7a7a80'], curtain: [36, 36, 40], leather: '#18181a', wood: 0x8a8a8a, floor: 0x9a9a9a },
+};
+
+const rugTex = (st = ROOM_STYLES.lounge) => tex(1024, 736, (x, w, h) => {
+  x.fillStyle = st.rug[0]; x.fillRect(0, 0, w, h);
   // lattice of small diamonds, low contrast
   x.strokeStyle = 'rgba(160,110,60,0.13)'; x.lineWidth = 2;
   for (let i = -h; i < w + h; i += 46) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + h, h); x.stroke(); x.beginPath(); x.moveTo(i + h, 0); x.lineTo(i, h); x.stroke(); }
   // borders
   const b = (m, wdt, col) => { x.strokeStyle = col; x.lineWidth = wdt; x.strokeRect(m, m, w - 2 * m, h - 2 * m); };
-  x.fillStyle = '#171c2c';
+  x.fillStyle = st.rug[1];
   x.fillRect(0, 0, w, 58); x.fillRect(0, h - 58, w, 58); x.fillRect(0, 0, 58, h); x.fillRect(w - 58, 0, 58, h);
-  b(8, 3, '#9a7440'); b(52, 4, '#9a7440'); b(64, 2, 'rgba(154,116,64,0.6)');
+  b(8, 3, st.rug[2]); b(52, 4, st.rug[2]); b(64, 2, st.rug[2]);
   // border motif
   x.fillStyle = 'rgba(154,116,64,0.55)';
   for (let i = 90; i < w - 60; i += 44) { x.beginPath(); x.arc(i, 29, 6, 0, 7); x.fill(); x.beginPath(); x.arc(i, h - 29, 6, 0, 7); x.fill(); }
@@ -72,9 +79,29 @@ const rugTex = () => tex(1024, 736, (x, w, h) => {
   noise(x, w, h, 0.12, 9);
 }, { wrap: false });
 
-const fabricTex = () => tex(512, 512, (x, w, h) => {
-  x.fillStyle = '#2a3a31'; x.fillRect(0, 0, w, h);
-  for (let i = 0; i < w; i += 32) { x.fillStyle = 'rgba(210,190,130,0.07)'; x.fillRect(i, 0, 2, h); }
+const fabricTex = (st = ROOM_STYLES.lounge) => tex(512, 512, (x, w, h) => {
+  x.fillStyle = st.fabric; x.fillRect(0, 0, w, h);
+  if (st.brick) {
+    // exposed brick: staggered courses with dark mortar
+    const bh = 32, bw = 96;
+    for (let y = 0; y < h; y += bh) {
+      const off = (y / bh) % 2 ? bw / 2 : 0;
+      for (let xx = -bw; xx < w + bw; xx += bw) {
+        const k = 0.8 + ((xx * 7 + y * 13) % 17) / 60;
+        x.fillStyle = `rgb(${106 * k | 0},${52 * k | 0},${36 * k | 0})`;
+        x.fillRect(xx + off + 3, y + 3, bw - 6, bh - 6);
+      }
+    }
+    x.fillStyle = 'rgba(30,24,20,0.5)';
+    for (let y = 0; y < h; y += bh) x.fillRect(0, y, w, 3);
+  } else if (st.damask) {
+    // a quiet repeating medallion wallpaper
+    x.fillStyle = 'rgba(220,200,150,0.08)';
+    for (let yy = 0; yy < h; yy += 128) for (let xx = (yy / 128) % 2 ? 64 : 0; xx < w + 64; xx += 128) {
+      x.beginPath(); x.ellipse(xx, yy + 64, 22, 40, 0, 0, 7); x.fill();
+      x.beginPath(); x.ellipse(xx, yy + 64, 40, 14, 0, 0, 7); x.fill();
+    }
+  } else for (let i = 0; i < w; i += 32) { x.fillStyle = 'rgba(210,190,130,0.07)'; x.fillRect(i, 0, 2, h); }
   noise(x, w, h, 0.1, 13);
 });
 
@@ -138,10 +165,11 @@ const cityTex = (seed) => tex(512, 1024, (x, w, h) => {
   }
 }, { wrap: false });
 
-const curtainTex = () => tex(256, 512, (x, w, h) => {
+const curtainTex = (st = ROOM_STYLES.lounge) => tex(256, 512, (x, w, h) => {
+  const [cr, cg, cb] = st.curtain;
   for (let i = 0; i < w; i++) {
     const k = 0.55 + 0.45 * Math.pow(0.5 + 0.5 * Math.sin(i / w * Math.PI * 7), 1.3);
-    x.fillStyle = `rgb(${62 * k | 0},${16 * k | 0},${22 * k | 0})`;
+    x.fillStyle = `rgb(${cr * k | 0},${cg * k | 0},${cb * k | 0})`;
     x.fillRect(i, 0, 1, h);
   }
   noise(x, w, h, 0.08, 29);
@@ -211,30 +239,32 @@ export class Lounge {
 
   dispose() { disposeTree(this.group); this.fadeMats = []; }
 
-  build(preset) {
+  build(preset, roomId = 'lounge') {
     disposeTree(this.group);
     this.fadeMats = [];
     this.lampFade = 1;
+    this.roomId = roomId;
+    const st = ROOM_STYLES[roomId] || ROOM_STYLES.lounge;
     const g = this.group;
     const M = (o) => ps1Material({ affine: 0, ...o });
     const add = (geo, mat, x, y, z, ry = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.y = ry; g.add(m); return m; };
     const uvScale = (geo, su, sv) => { const u = geo.attributes.uv; for (let i = 0; i < u.count; i++) u.setXY(i, u.getX(i) * su, u.getY(i) * sv); return geo; };
 
     // shared materials
-    const walnut = M({ map: wainscotTex(), gloss: 0.35, shine: 40 });
+    const walnut = M({ map: wainscotTex(), color: st.wood, gloss: 0.35, shine: 40 });
     const trimWood = M({ color: 0x3a2214, gloss: 0.5, shine: 60 });
     const brass = M({ color: 0xb8955a, emissive: 0x100a04, gloss: 1.4, shine: 90 });
     const bronze = M({ color: 0x3a2c1e, gloss: 1.0, shine: 70 });
     const black = M({ color: 0x0c0b0a, gloss: 0.4, shine: 40 });
 
     // ---- floor + rug
-    const floor = add(uvScale(new THREE.PlaneGeometry(RX * 2, RZ * 2), RX, RZ), M({ map: floorTex(), gloss: 0.35, shine: 45 }), 0, FLOOR_Y, 0);
+    const floor = add(uvScale(new THREE.PlaneGeometry(RX * 2, RZ * 2), RX, RZ), M({ map: floorTex(), color: st.floor, gloss: 0.35, shine: 45 }), 0, FLOOR_Y, 0);
     floor.rotation.x = -Math.PI / 2;
-    const rug = add(new THREE.PlaneGeometry(4.6, 3.3), M({ map: rugTex(), gloss: 0.02, shine: 4 }), 0, FLOOR_Y + 0.006, 0);
+    const rug = add(new THREE.PlaneGeometry(4.6, 3.3), M({ map: rugTex(st), gloss: 0.02, shine: 4 }), 0, FLOOR_Y + 0.006, 0);
     rug.rotation.x = -Math.PI / 2;
 
     // ---- walls: panelled wainscot, fabric above, rails and crown
-    const fabric = M({ map: fabricTex(), gloss: 0.05, shine: 8 });
+    const fabric = M({ map: fabricTex(st), gloss: st.brick ? 0.02 : 0.05, shine: 8 });
     const walls = [[RX * 2, 0, -RZ, 0], [RX * 2, 0, RZ, Math.PI], [RZ * 2, -RX, 0, Math.PI / 2], [RZ * 2, RX, 0, -Math.PI / 2]];
     for (const [w, x, z, ry] of walls) {
       add(uvScale(new THREE.PlaneGeometry(w, WAINS), w / 0.9, 1), walnut, x, FLOOR_Y + WAINS / 2, z, ry);
@@ -305,7 +335,7 @@ export class Lounge {
       g.add(im);
     });
     // stools
-    const seatLeather = M({ map: plainLeather('#4a1a12'), gloss: 0.55, shine: 40 });
+    const seatLeather = M({ map: plainLeather(st.leather), gloss: 0.55, shine: 40 });
     for (const sx of [-1.1, 0, 1.1]) {
       const z = bz + 1.85;
       add(new THREE.CylinderGeometry(0.2, 0.19, 0.08, 28), seatLeather, sx, FLOOR_Y + 0.76, z);
@@ -316,8 +346,8 @@ export class Lounge {
     }
 
     // ---- chesterfield along the left wall
-    const tuft = M({ map: leatherTex(), gloss: 0.5, shine: 34 });
-    const smooth = M({ map: plainLeather('#4a1c14'), gloss: 0.5, shine: 34 });
+    const tuft = M({ map: leatherTex(st.leather), gloss: 0.5, shine: 34 });
+    const smooth = M({ map: plainLeather(st.leather), gloss: 0.5, shine: 34 });
     const sx0 = -RX + 0.62, sz0 = 0.2;
     add(new RoundedBoxGeometry(0.9, 0.36, 2.3, 3, 0.06), smooth, sx0, FLOOR_Y + 0.26, sz0);
     add(new RoundedBoxGeometry(0.24, 0.5, 2.3, 4, 0.1), tuft, sx0 - 0.36, FLOOR_Y + 0.62, sz0);
@@ -387,7 +417,7 @@ export class Lounge {
 
     // ---- front wall: tall windows over the city, velvet curtains, a plant
     const fz = RZ - 0.02;
-    const curtain = M({ map: curtainTex(), gloss: 0.12, shine: 12 });
+    const curtain = M({ map: curtainTex(st), gloss: 0.12, shine: 12 });
     [-2.6, 0, 2.6].forEach((wx, i) => {
       add(new THREE.PlaneGeometry(1.1, 1.95), M({ map: cityTex(11 + i * 7), unlit: true, color: 0xd8d8e0, fog: 0 }), wx, FLOOR_Y + 1.45, fz - 0.01, Math.PI);
       for (const [w, h, ox, oy] of [[1.2, 0.06, 0, 0.98], [1.2, 0.06, 0, -0.98], [0.06, 2.0, -0.58, 0], [0.06, 2.0, 0.58, 0], [0.035, 1.95, 0, 0], [1.1, 0.035, 0, 0.3]]) {

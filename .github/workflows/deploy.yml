@@ -30,6 +30,8 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      - name: Physics edge-case tests
+        run: npm run test:physics
       - name: Build the site (landing page + the game in play/)
         run: npm run site
       - name: Setup Pages

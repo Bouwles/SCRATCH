@@ -10,7 +10,10 @@ import { floorName } from '../game/run.js';
 import { relicIcon, achIcon, glyph, glyphHTML, glyphURL, setArtMode } from './art.js';
 import { STYLE_GRADES, STYLE_COL, ROMAN, HEAT_DESC, styleGrade, styleProgress, heatProgress, stakeText, ANOMALIES, SECRET_ANOMALY } from '../game/mastery.js';
 import { BOSSES } from '../game/encounters.js';
-import { GAME_VERSION } from '../game/meta.js';
+import { GAME_VERSION, UPDATE_NAME } from '../game/meta.js';
+import { AfterUI } from './AfterUI.js';
+import { SYNERGIES, RIVALS, rivalById, buildName, handicapMul } from '../game/afterhours.js';
+import { MISSIONS, LOCATIONS } from '../game/rajis.js';
 
 // contextual tips: each shows once, the first time it matters (resettable in Settings)
 const TIPS = {
@@ -22,6 +25,10 @@ const TIPS = {
   style: ['STYLE', 'Interesting shots raise your STYLE grade and multiply your score. Repeating easy shots lets it fade.'],
   heat: ['HEAT', 'You are dominating, so the club turns up the HEAT: harder tables, better rewards. Losing a table cools it.'],
   bet: ['DOUBLE OR NOTHING', 'Optional. Keep the condition for double chips. Break it and the table pays nothing.'],
+  rival: ['RIVALS', 'A race. After every shot you take, they take theirs. First to the goal wins the table.'],
+  roller: ['HIGH ROLLER', 'Bet your own chips on a harder table. Win and they come back doubled.'],
+  trick: ['TRICK TABLES', 'A puzzle with three attempts. Losing one costs nothing but the prize.'],
+  labels: ['READ THE TABLE', 'Some tables mark balls and pockets. The labels follow them around.'],
   stakes: ['HIGH STAKES', 'One rule you must not break. Break it and the table is lost. Keep it for a much better reward.'],
   boss: ['BOSS TABLES', 'Bosses escalate as you close in. Only a few pots count per shot, so no build can one-shot them.'],
   items: ['ITEMS', 'Press 1, 2 or 3 during a table to use an item.'],
@@ -65,6 +72,14 @@ function cosmeticPreview(cos) {
   }
   return c;
 }
+
+const QUARTERMASTER = [
+  'SIGN HERE. AND HERE. AND ON THE MISSILE.',
+  'EVERYTHING IS CLASSIFIED EXCEPT THE PRICES.',
+  'THE ROBOT WANTS TO KNOW IF YOU NEED A RECEIPT.',
+  'RICHARD ALREADY TOOK THE GOOD ONES.',
+  'NO REFUNDS. THIS IS A WAR.',
+];
 
 const SHOPKEEP = [
   'WELCOME, WELCOME. NO REFUNDS.',
@@ -225,8 +240,38 @@ export class UI {
       this.close(entry);
       this.showMainMenu();
     };
-    const entry = this.open(el, { keys: () => { go(); return true; }, click: go });
+    // a few words the title screen answers to
+    const SECRETS = { BREAK: () => this.titleBreak(), '0377': () => this.titleClock(el) };
+    const CH = { KeyB: 'B', KeyR: 'R', KeyE: 'E', KeyA: 'A', KeyK: 'K', Digit0: '0', Digit3: '3', Digit7: '7', Numpad0: '0', Numpad3: '3', Numpad7: '7' };
+    let typed = '';
+    const keys = (code) => {
+      const ch = CH[code];
+      if (ch && Object.keys(SECRETS).some(w => w.startsWith(typed + ch))) {
+        typed += ch;
+        this.g.audio.init();
+        this.g.audio.tick();
+        if (SECRETS[typed]) { SECRETS[typed](); typed = ''; }
+        return true;
+      }
+      typed = '';
+      go();
+      return true;
+    };
+    const entry = this.open(el, { keys, click: go });
     el.addEventListener('click', go);
+    const cr = el.querySelector('.copyright');
+    cr.classList.add('ia');
+    let crN = 0;
+    cr.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.g.audio.init();
+      if (++crN < 3) { this.g.audio.ui('move'); return; }
+      crN = 0;
+      const d = this.g.meta.data;
+      cr.textContent = d.afterhours?.found ? '© 1998 ZERO CRASH SOFTWARE · THE CLUB NEVER REALLY CLOSES' : '© 1998 ZERO CRASH SOFTWARE · NOBODY HAS PLAYED THIS DISC SINCE 1999. HELLO.';
+      d.secrets.copyright = 1; this.g.meta.save();
+      this.g.audio.levelUp();
+    });
     // (the eight on the logo does not like being poked)
     const eight = el.querySelector('.logo-8');
     let pokes = 0;
@@ -251,7 +296,7 @@ export class UI {
   footer(el) {
     const g = this.g;
     const f = h('div', 'menu-foot');
-    f.innerHTML = `<span class="ver ia">v${GAME_VERSION} · <u>CREDITS</u></span><span class="sig ia">MADE BY PAUL NERCESSIAN</span>`;
+    f.innerHTML = `<span class="ver ia">v${GAME_VERSION} · <span class="aft">${UPDATE_NAME}</span> · <u>CREDITS</u></span><span class="sig ia">MADE BY PAUL NERCESSIAN</span>`;
     el.appendChild(f);
     f.querySelector('.ver').onclick = (e) => { e.stopPropagation(); g.audio.ui('select'); this.showCredits(); };
     let n = 0;
@@ -272,9 +317,9 @@ export class UI {
   showCredits() {
     const el = h('div', 'screen dim');
     const box = h('div', 'panel credits-box');
-    box.innerHTML = `<div class="title-bar chrome" style="text-align:center">SCRATCH</div><div class="title-jp" style="text-align:center">クレジット</div>
+    box.innerHTML = `<div class="title-bar chrome" style="text-align:center">SCRATCH: ${UPDATE_NAME}</div><div class="title-jp" style="text-align:center">クレジット</div>
       <div class="cr-main">CREATED BY<br><b>PAUL NERCESSIAN</b></div>
-      <div class="cr-sec">VERSION ${GAME_VERSION}</div>
+      <div class="cr-sec">VERSION ${GAME_VERSION} · THE ${UPDATE_NAME} UPDATE</div>
       <div class="cr-sec">BUILT WITH <b>THREE.JS</b> (MIT LICENSE) AND <b>VITE</b></div>
       <div class="cr-sec">TYPEFACES (SIL OPEN FONT LICENSE)<br>PRESS START 2P · DELA GOTHIC ONE · DOTGOTHIC16<br>CHAKRA PETCH · INTER · CORMORANT GARAMOND</div>
       <div class="cr-sec">EVERY SOUND AND EVERY NOTE OF MUSIC<br>IS SYNTHESISED BY THE GAME AS YOU PLAY</div>
@@ -289,6 +334,7 @@ export class UI {
 
   showMainMenu() {
     this.closeAll();
+    this.setRajis(false);
     const d = this.g.meta.data;
     const el = h('div', 'screen dim2');
     el.innerHTML = `
@@ -300,11 +346,15 @@ export class UI {
     const sus = g.suspended, saved = !sus && g.hasSavedRun() ? g.meta.data.savedRun : null;
     const cont = sus || saved;
     const contRun = sus ? sus.run : saved;
+    const MODE_NAME = { daily: 'DAILY · ', endless: 'ENDLESS · ', bossrush: 'BOSS RUSH · ', onecue: 'ONE CUE · ', chaos: 'CHAOS · ' };
+    const contSub = !cont ? '' : contRun.mode === 'rajis' ? `RAJIS · OPERATION ${contRun.op || ''} · STOP ${contRun.node + 1}/9`
+      : `${MODE_NAME[contRun.mode] || ''}${contRun.after ? 'AFTERHOURS' : `FLOOR ${contRun.floor}`} · ${contRun.chips} CHIPS · ${contRun.relics.length} RELICS`;
+    const modes = ['onecue', 'chaos', 'bossrush'].some(m => g.gate(m));
     const defs = [
-      cont ? ['CONTINUE RUN', `${contRun.mode === 'daily' ? 'DAILY · ' : contRun.endless ? 'ENDLESS · ' : ''}FLOOR ${contRun.floor} · ${contRun.chips} CHIPS · ${contRun.relics.length} RELICS`, () => { this.close(entry); this.transition(() => (sus ? g.resumeRun() : g.continueSavedRun())); }] : null,
-      ['PLAY', 'NEW RUN · DAILY SCRATCH · ENDLESS', () => this.showPlayMenu()],
+      cont ? ['CONTINUE RUN', contSub, () => { this.close(entry); if (!sus && contRun.mode === 'rajis') this.setRajis(true); this.transition(() => (sus ? g.resumeRun() : g.continueSavedRun())); }] : null,
+      ['PLAY', `NEW RUN · DAILY SCRATCH · ENDLESS${modes ? ' · MODES' : ''}`, () => this.showPlayMenu()],
       ['LOADOUT', 'BALLS · CUES · TABLES', () => this.showLoadout()],
-      ['COLLECTION', 'RELICS · BOSSES · RECORDS', () => this.showCollection()],
+      ['COLLECTION', 'RELICS · SYNERGIES · RECORDS · HISTORY', () => this.showCollection()],
       ['SETTINGS', 'VIDEO · AUDIO · SAVE', () => this.showSettings()],
       ['PLAY NORMAL 8-BALL', 'SCRATCH CLASSIC · STRAIGHT POOL', () => this.confirmClassic(), 'gold'],
     ].filter(Boolean);
@@ -313,8 +363,15 @@ export class UI {
       onSelect: (i) => { this.g.audio.ui('select'); defs[i][2](); },
     });
     this.footer(el);
+    // something small in the corner, for the people who found it
+    if (d.rajis?.found) {
+      const dot = h('div', 'rajis-dot ia');
+      dot.onclick = (e) => { e.stopPropagation(); g.audio.radarPing(); this.rajisEnter(); };
+      el.appendChild(dot);
+    }
     const entry = this.open(el, { keys });
     this.g.state = 'menu';
+    this.announceUnlocks();
     if (g.meta.problem === 'corrupt') { g.meta.problem = null; this.toast('A NEW SAVE WAS STARTED', '#ff3b5c', 'YOUR SAVE COULD NOT BE READ'); }
     if (g.meta.problem === 'nostorage' && !g.meta.warnedStorage) { g.meta.warnedStorage = true; this.toast('PROGRESS LASTS UNTIL YOU CLOSE THE TAB', '#ffc21c', 'THIS BROWSER IS BLOCKING SAVES'); }
   }
@@ -342,15 +399,29 @@ export class UI {
     drawNew();
     add(`DAILY SCRATCH<span class="sub">${dr.date} · ${dr.played ? `BEST ${fmt(dr.best)} · HEAT ${ROMAN[dr.bestHeat || 0]}${dr.completed ? ' · COMPLETED' : ''}` : 'THE SAME ROAD FOR EVERYONE TODAY'}</span>${warn}`);
     add(endlessOn ? `ENDLESS<span class="sub">${E.deepest ? `DEEPEST FLOOR ${E.deepest} · BEST ${fmt(E.best || 0)}` : 'BEYOND THE HOUSE · HOW FAR DOWN DOES IT GO?'}</span>${warn}` : `ENDLESS<span class="sub">${glyphHTML('lock')} WIN A RUN TO UNLOCK</span>`, endlessOn ? '' : ' disabled');
+    // AFTERHOURS: more ways in, as they are earned
+    const modesOn = ['onecue', 'chaos', 'bossrush'].some(m => g.gate(m));
+    const handOn = g.gate('handicaps');
+    const extra = [];
+    if (modesOn) { add('MODES<span class="sub">BOSS RUSH · ONE CUE · CHAOS</span>'); extra.push('modes'); }
+    let handItem = null;
+    const drawHand = () => {
+      const sel = (d.handSel || []);
+      handItem.innerHTML = `HANDICAPS<span class="sub">${sel.length ? `${sel.length} ON · REWARD x${handicapMul(sel).toFixed(2)} · FOR NEW RUN AND ENDLESS` : 'OPTIONAL RULES FOR A BIGGER REWARD'}</span>`;
+    };
+    if (handOn) { handItem = add(''); drawHand(); extra.push('hand'); }
     add('BACK');
     hint.innerHTML = breakMax ? `${glyphHTML('arrowL')}${glyphHTML('arrowR')} CHANGE BREAK LEVEL` : '';
     let entry;
     const start = (opts) => { this.close(entry); const m = this.stack.find(x => x.el.querySelector('.logo')); if (m) this.close(m); g.suspended = null; this.transition(() => g.startRun(opts)); };
+    const hand = () => (handOn ? d.handSel || [] : []);
     const keys = this.navList(items, {
       onSelect: (i) => {
-        if (i === 0) { d.lastBreak = brk; g.meta.save(); g.audio.ui('select'); start({ mode: 'standard', breakLv: brk }); }
+        if (i === 0) { d.lastBreak = brk; g.meta.save(); g.audio.ui('select'); start({ mode: 'standard', breakLv: brk, hand: hand() }); }
         else if (i === 1) { g.audio.ui('select'); start({ mode: 'daily' }); }
-        else if (i === 2) { if (!endlessOn) { g.audio.ui('deny'); return; } g.audio.ui('select'); start({ mode: 'endless' }); }
+        else if (i === 2) { if (!endlessOn) { g.audio.ui('deny'); return; } g.audio.ui('select'); start({ mode: 'endless', hand: hand() }); }
+        else if (extra[i - 3] === 'modes') { g.audio.ui('select'); this.showModes(); }
+        else if (extra[i - 3] === 'hand') { g.audio.ui('select'); this.showHandicaps(drawHand); }
         else { g.audio.ui('back'); this.close(entry); }
       },
     });
@@ -390,38 +461,40 @@ export class UI {
     const tabs = box.querySelector('.tabs'), grid = box.querySelector('.grid');
     const names = ['BALLS', 'CUES', 'TABLES', 'STARTER RELIC'];
     let tab = 0;
-    const lockText = (it) => it.unlock.level ? `LOCKED · REACH LV ${it.unlock.level}` : it.unlock.ach ? `LOCKED · ${ACHIEVEMENTS.find(a => a.id === it.unlock.ach)?.name}` : 'LOCKED';
+    const secretAch = (it) => { const a = ACHIEVEMENTS.find(x => x.id === it.unlock?.ach); return a?.secret && !meta.data.achievements[a.id]; };
+    const lockText = (it) => it.unlock.level ? `LOCKED · REACH LV ${it.unlock.level}` : it.unlock.ach ? (secretAch(it) ? 'LOCKED · A SECRET' : `LOCKED · ${ACHIEVEMENTS.find(a => a.id === it.unlock.ach)?.name}`) : 'LOCKED';
+    const nm = (it) => (secretAch(it) && !meta.isUnlocked(it) ? '???' : it.name);
     const render = () => {
       tabs.innerHTML = '';
       names.forEach((n, i) => { const t = h('div', 'tab' + (i === tab ? ' sel' : ''), n); t.onclick = () => { tab = i; g.audio.ui('move'); render(); }; tabs.appendChild(t); });
       grid.innerHTML = '';
-      if (tab === 0) BALL_SKINS.forEach(b => {
+      if (tab === 0) BALL_SKINS.filter(b => meta.visible(b)).forEach(b => {
         const un = meta.isUnlocked(b);
         const o = h('div', 'opt' + (sel.ball === b.id ? ' sel' : '') + (un ? '' : ' locked'));
         const sw = [1, 2, 3, 4, 5, 6, 7, 8].map(n => `<i style="background:${b.tex.color ? b.tex.color(n) : ballColor(n)}"></i>`).join('');
-        o.innerHTML = `<div class="nm">${b.name}</div><div class="sw">${sw}</div><div class="${un ? 'ds' : 'lk'}">${un ? b.desc : lockText(b)}</div>`;
+        o.innerHTML = `<div class="nm">${nm(b)}</div><div class="sw">${sw}</div><div class="${un ? 'ds' : 'lk'}">${un ? b.desc : lockText(b)}</div>`;
         o.onclick = () => { if (!un) { g.audio.ui('deny'); return; } sel.ball = b.id; meta.save(); g.applyCosmetics(); g.audio.ui('select'); render(); };
         grid.appendChild(o);
       });
-      if (tab === 1) CUE_SKINS.forEach(c => {
+      if (tab === 1) CUE_SKINS.filter(c => meta.visible(c)).forEach(c => {
         const un = meta.isUnlocked(c);
         const o = h('div', 'opt' + (sel.cue === c.id ? ' sel' : '') + (un ? '' : ' locked'));
         const cv = document.createElement('canvas'); cv.width = 64; cv.height = 8; cv.className = 'px-icon';
         const tmp = document.createElement('canvas'); tmp.width = 16; tmp.height = 256; c.paint(tmp.getContext('2d'), 16, 256);
         const x = cv.getContext('2d'); x.save(); x.translate(64, 0); x.rotate(Math.PI / 2); x.drawImage(tmp, 0, 0, 16, 256, 0, 0, 8, 64); x.restore();
         cv.style.width = '100%'; cv.style.height = 'calc(var(--px)*6)'; cv.style.float = 'none'; cv.style.margin = 'calc(var(--px)*2) 0';
-        o.innerHTML = `<div class="nm">${c.name}</div>`;
+        o.innerHTML = `<div class="nm">${nm(c)}</div>`;
         o.appendChild(cv);
         o.appendChild(h('div', un ? 'ds' : 'lk', un ? c.desc : lockText(c)));
         o.onclick = () => { if (!un) { g.audio.ui('deny'); return; } sel.cue = c.id; meta.save(); g.applyCosmetics(); g.audio.ui('select'); render(); };
         grid.appendChild(o);
       });
       if (tab === 2) {
-        THEMES.forEach(t => {
+        THEMES.filter(t => meta.visible(t)).forEach(t => {
           const un = meta.isUnlocked(t);
           const o = h('div', 'opt' + (!sel.shuffle && sel.theme === t.id ? ' sel' : '') + (un ? '' : ' locked'));
           const sw = [t.felt, t.wood[0], ...t.neon, t.carpet[1]].slice(0, 6).map(c => `<i style="background:${c}"></i>`).join('');
-          o.innerHTML = `<div class="nm">${t.name}</div><div class="sw">${sw}</div><div class="${un ? 'ds' : 'lk'}">${un ? t.desc : lockText(t)}</div>`;
+          o.innerHTML = `<div class="nm">${nm(t)}</div><div class="sw">${sw}</div><div class="${un ? 'ds' : 'lk'}">${un ? t.desc : lockText(t)}</div>`;
           o.onclick = () => { if (!un) { g.audio.ui('deny'); return; } sel.theme = t.id; sel.shuffle = false; meta.save(); g.applyCosmetics(); g.audio.ui('select'); render(); };
           grid.appendChild(o);
         });
@@ -453,7 +526,7 @@ export class UI {
   }
 
   // ------------------------------------------------------ collection
-  showCollection() {
+  showCollection(startTab = 0) {
     const g = this.g, meta = g.meta, d = meta.data;
     const el = h('div', 'screen dim');
     const box = h('div', 'panel wide');
@@ -463,34 +536,53 @@ export class UI {
       <div class="tabs"></div><div class="scroll"><div class="grid"></div></div><div class="foot"><span class="hint"></span><button class="btn small">BACK</button></div>`;
     el.appendChild(box);
     const tabs = box.querySelector('.tabs'), grid = box.querySelector('.grid'), hint = box.querySelector('.hint');
-    const NAMES = ['RELICS', 'BOSSES', 'ANOMALIES', 'COSMETICS', 'ACHIEVEMENTS', 'RECORDS'];
-    let tab = 0;
+    const NAMES = ['RELICS', 'SYNERGIES', 'BOSSES', 'ANOMALIES', 'COSMETICS', 'ACHIEVEMENTS', 'RECORDS', 'HISTORY'];
+    let tab = Math.min(startTab, NAMES.length - 1);
     const opt = (html, cls = '') => { const o = h('div', 'opt' + cls, html); grid.appendChild(o); return o; };
     const render = () => {
       tabs.innerHTML = '';
       NAMES.forEach((n, i) => { const t = h('div', 'tab' + (i === tab ? ' sel' : ''), n); t.onclick = () => { tab = i; g.audio.ui('move'); render(); }; tabs.appendChild(t); });
       grid.innerHTML = '';
       grid.style.display = 'grid';
-      if (tab === 0) {
+      const name = NAMES[tab];
+      if (name === 'RELICS') {
         const seen = RELICS.filter(r => d.seenRelics[r.id]).length;
-        hint.textContent = `DISCOVERED ${seen} / ${RELICS.length}`;
-        RELICS.forEach(r => {
+        hint.innerHTML = `DISCOVERED ${seen} / ${RELICS.length} · CLICK A RELIC TO MARK IT ${glyphHTML('star')}`;
+        const fav = d.favorites || {};
+        const list = [...RELICS].sort((a, b) => (fav[b.id] ? 1 : 0) - (fav[a.id] ? 1 : 0));
+        list.forEach(r => {
           const sn = d.seenRelics[r.id];
-          const o = h('div', 'opt');
+          const o = h('div', 'opt' + (fav[r.id] ? ' sel' : ''));
           o.appendChild(relicIcon(r.id, RARITY[r.rarity].color, !sn));
           o.appendChild(h('div', 'nm', sn ? r.name : '???'));
-          o.appendChild(h('div', 'ds', `<span style="color:${RARITY[r.rarity].color}">${RARITY[r.rarity].name}</span>${sn && r.up ? ' · <span style="color:var(--gold)">UPGRADES</span>' : ''}<br>${sn ? r.desc : 'Not yet discovered.'}${sn && r.tags?.length ? `<div class="rtags">${this.relicTags(r)}</div>` : ''}`));
+          o.appendChild(h('div', 'ds', `<span style="color:${RARITY[r.rarity].color}">${RARITY[r.rarity].name}${r.risk ? ' · RISK' : ''}</span>${sn && r.up ? ' · <span style="color:var(--gold)">UPGRADES</span>' : ''}<br>${sn ? r.desc : 'Not yet discovered.'}${sn && r.tags?.length ? `<div class="rtags">${this.relicTags(r)}</div>` : ''}`));
+          if (sn) {
+            const star = glyph(fav[r.id] ? 'star' : 'starOff'); star.classList.add('fav');
+            o.appendChild(star);
+            o.onclick = () => { d.favorites = d.favorites || {}; if (d.favorites[r.id]) delete d.favorites[r.id]; else d.favorites[r.id] = 1; meta.save(); g.audio.ui('move'); render(); };
+          }
           grid.appendChild(o);
         });
-      } else if (tab === 1) {
-        const all = Object.values(BOSSES);
+      } else if (name === 'SYNERGIES') {
+        const found = SYNERGIES.filter(x => d.synergies?.[x.id]).length;
+        hint.textContent = `DISCOVERED ${found} / ${SYNERGIES.length} · THEY ARE NEVER LISTED ANYWHERE ELSE`;
+        for (const x of SYNERGIES) {
+          const got = d.synergies?.[x.id];
+          const o = h('div', 'opt' + (got ? ' sel' : ''));
+          if (got && x.relics) x.relics.slice(0, 2).forEach(k => { const id = k.split('|')[0], r = relicById(id); if (r) o.appendChild(relicIcon(id, RARITY[r.rarity].color)); });
+          else if (got) o.appendChild(relicIcon('demon_chalk', RARITY.cursed.color));
+          o.insertAdjacentHTML('beforeend', `<div class="nm" style="color:${got ? 'var(--gold)' : 'var(--dim)'}">${got ? x.name : '???'}</div><div class="ds">${got ? x.desc : 'Two things that work better together. You will know it when it happens.'}</div>`);
+          grid.appendChild(o);
+        }
+      } else if (name === 'BOSSES') {
+        const all = Object.values(BOSSES).filter(b => !b.secret || d.seen?.bosses?.[b.id]);
         const beaten = all.filter(b => d.bosses?.[b.id]).length;
         hint.textContent = `DEFEATED ${beaten} / ${all.length}`;
         all.forEach(b => {
-          const met = d.seen?.bosses?.[b.id], n = d.bosses?.[b.id] || 0;
-          opt(`<div class="nm" style="color:${met ? b.color : 'var(--dim)'}">${met ? b.name : '???'}</div><div class="ds">${met ? b.blurb : 'You have not met this table yet.'}<br><span style="color:${n ? 'var(--green)' : 'var(--dim)'}">${n ? `DEFEATED ${n}x` : met ? 'UNDEFEATED' : ''}</span></div>`, n ? ' sel' : '');
+          const met = d.seen?.bosses?.[b.id], n = d.bosses?.[b.id] || 0, rx = d.remixes?.[b.id] || 0;
+          opt(`<div class="nm" style="color:${met ? b.color : 'var(--dim)'}">${met ? b.name : '???'}</div><div class="ds">${met ? b.blurb : 'You have not met this table yet.'}<br><span style="color:${n ? 'var(--green)' : 'var(--dim)'}">${n ? `DEFEATED ${n}x` : met ? 'UNDEFEATED' : ''}${rx ? ` · REMIX BEATEN ${rx}x` : n >= 3 && b.id !== 'owner' ? ' · IT MAY COME BACK REMIXED' : ''}</span></div>`, n ? ' sel' : '');
         });
-      } else if (tab === 2) {
+      } else if (name === 'ANOMALIES') {
         const all = [...ANOMALIES, SECRET_ANOMALY];
         const found = all.filter(a => d.seen?.anomalies?.[a.id]).length;
         hint.textContent = `FOUND ${found} / ${ANOMALIES.length}${d.seen?.anomalies?.flashback ? ' + 1' : ''}`;
@@ -499,20 +591,22 @@ export class UI {
           if (a.secret && !f) return;
           opt(`<div class="nm" style="color:${f ? '#c08aff' : 'var(--dim)'}">${f ? a.name : '???'}</div><div class="ds">${f ? a.desc : 'Something very wrong, somewhere.'}</div>`, f ? ' sel' : '');
         });
-      } else if (tab === 3) {
+      } else if (name === 'COSMETICS') {
         const lockText = (it) => it.unlock?.ach ? (ACHIEVEMENTS.find(x => x.id === it.unlock.ach)?.secret && !d.achievements[it.unlock.ach] ? 'A SECRET' : `ACHIEVEMENT · ${ACHIEVEMENTS.find(x => x.id === it.unlock.ach)?.name}`) : it.unlock?.level ? `REACH LV ${it.unlock.level}` : '';
         const all = [['TABLE', THEMES], ['BALLS', BALL_SKINS], ['CUE', CUE_SKINS]];
         let got = 0, tot = 0;
         for (const [kind, list] of all) for (const it of list) {
+          if (!meta.visible(it)) continue;
           const un = meta.isUnlocked(it); tot++; if (un) got++;
           const secret = it.unlock?.ach && ACHIEVEMENTS.find(x => x.id === it.unlock.ach)?.secret && !un;
           opt(`<div class="nm" style="color:${un ? 'var(--ink)' : 'var(--dim)'}">${secret ? '???' : it.name}</div><div class="ds"><span style="color:var(--cyan)">${kind}</span><br>${un ? it.desc : lockText(it)}</div>`, un ? ' sel' : ' locked');
         }
         hint.textContent = `UNLOCKED ${got} / ${tot} · CLASSIC COSMETICS LIVE IN SCRATCH CLASSIC`;
-      } else if (tab === 4) {
-        const got = ACHIEVEMENTS.filter(a => d.achievements[a.id]).length;
-        hint.textContent = `UNLOCKED ${got} / ${ACHIEVEMENTS.length}`;
-        ACHIEVEMENTS.forEach(a => {
+      } else if (name === 'ACHIEVEMENTS') {
+        const list = meta.achievementList();
+        const got = list.filter(a => d.achievements[a.id]).length;
+        hint.textContent = `UNLOCKED ${got} / ${list.length}`;
+        list.forEach(a => {
           const sn = d.achievements[a.id];
           const hidden = a.secret && !sn;
           const o = h('div', 'opt' + (sn ? ' sel' : ''));
@@ -520,16 +614,32 @@ export class UI {
           o.insertAdjacentHTML('beforeend', `<div class="nm" style="color:${sn ? 'var(--gold)' : 'var(--dim)'}">${hidden ? '???' : a.name}</div><div class="ds">${hidden ? 'A secret. Keep your eyes open.' : a.desc}${a.reward && !hidden ? `<br><span style="color:var(--cyan)">UNLOCKS: ${a.reward}</span>` : ''}</div>`);
           grid.appendChild(o);
         });
-      } else {
+      } else if (name === 'RECORDS') {
         hint.textContent = '';
         grid.style.display = 'block';
         const st = d.stats, B = d.bests || {}, E = d.endless || {}, dr = g.dailyRecord(), C = d.classic?.stats || {};
-        const tt = B.fastestWin ? `${Math.floor(B.fastestWin / 60)}:${String(B.fastestWin % 60).padStart(2, '0')}` : '—';
-        const sec = (title, rows) => `<div class="section-h">${title}</div><div class="stats">${rows.map(([k, v]) => `<div>${k}</div><div class="v">${v}</div>`).join('')}</div>`;
-        grid.innerHTML = sec('PERSONAL BESTS', [['HIGHEST SCORE', fmt(B.highScore || 0)], ['FASTEST WIN', tt], ['HIGHEST HEAT', ROMAN[B.highestHeat || 0]], ['LARGEST COMBO', B.largestCombo || 0], ['MOST BALLS IN ONE SHOT', B.mostBalls || 0], ['BEST GRADE', B.bestGrade || '—']])
-          + sec('MODES', [['DAILY ' + dr.date, dr.played ? `${fmt(dr.best)} · HEAT ${ROMAN[dr.bestHeat || 0]}${dr.completed ? ' · DONE' : ''}` : 'NOT PLAYED'], ['ENDLESS DEEPEST FLOOR', E.deepest || '—'], ['ENDLESS BEST SCORE', fmt(E.best || 0)], ['ENDLESS MAX HEAT', ROMAN[E.heat || 0]], ['HIGHEST BREAK BEATEN', d.breakBest >= 0 && d.breakBest != null ? d.breakBest : '—']])
-          + sec('CAREER', [['RUNS STARTED', fmt(st.runs || 0)], ['RUNS WON', fmt(st.wins || 0)], ['TABLES CLEARED', fmt(st.tables || 0)], ['BOSSES BEATEN', fmt(st.bosses || 0)], ['BALLS POTTED', fmt(st.pots || 0)], ['BANK SHOTS', fmt(st.banks || 0)], ['SCRATCHES', fmt(st.scratches || 0)], ['GOLDEN BALLS', fmt(st.golds || 0)], ['BEST RUN SCORE', fmt(st.bestScore || 0)], ['BEST SINGLE SHOT', fmt(st.bestShot || 0)]])
-          + sec('SCRATCH CLASSIC', [['MATCHES PLAYED', C.played || 0], ['MATCHES WON', C.won || 0], ['BEST WIN STREAK', C.bestStreak || 0], ['BREAK AND RUNS', C.breakRuns || 0]]);
+        const tt = (v) => (v ? `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}` : '—');
+        const rivalsBeaten = Object.values(d.rivals || {}).reduce((a, r) => a + (r.wins || 0), 0);
+        const sec = (title, rows) => `<div class="section-h">${title}</div><div class="stats">${rows.filter(Boolean).map(([k, v]) => `<div>${k}</div><div class="v">${v}</div>`).join('')}</div>`;
+        grid.innerHTML = sec('PERSONAL BESTS', [['HIGHEST SCORE', fmt(B.highScore || 0)], ['FASTEST WIN', tt(B.fastestWin)], ['HIGHEST HEAT', ROMAN[B.highestHeat || 0]], ['HIGHEST STYLE', B.highestStyle ? `<span style="color:${STYLE_COL[B.highestStyle]}">${STYLE_GRADES[B.highestStyle]}</span>` : '—'], ['LARGEST COMBO', B.largestCombo || 0], ['MOST BALLS IN ONE SHOT', B.mostBalls || 0], ['LONGEST BANK (CUSHIONS)', B.longestBank || '—'], ['MOST EFFECTS IN ONE SHOT', B.mostTriggers || '—'], ['FURTHEST FLOOR', B.furthestFloor ? (B.furthestFloor >= 4 && d.afterhours?.found ? 'AFTERHOURS' : B.furthestFloor) : '—'], ['BEST GRADE', B.bestGrade || '—']])
+          + sec('MODES', [['DAILY ' + dr.date, dr.played ? `${fmt(dr.best)} · HEAT ${ROMAN[dr.bestHeat || 0]}${dr.completed ? ' · DONE' : ''}` : 'NOT PLAYED'], ['ENDLESS DEEPEST FLOOR', E.deepest || '—'], ['ENDLESS BEST SCORE', fmt(E.best || 0)], ['ENDLESS MAX HEAT', ROMAN[E.heat || 0]], ['HIGHEST BREAK BEATEN', d.breakBest >= 0 && d.breakBest != null ? d.breakBest : '—'],
+            g.gate('bossrush') && ['BOSS RUSH BEST TIME', tt(B.bossRushTime)], g.gate('bossrush') && ['BOSS RUSH BEST SCORE', fmt(B.bossRushScore || 0)], g.gate('bossrush') && ['BOSS RUSH FEWEST MISSES', B.bossRushMisses >= 0 ? B.bossRushMisses : '—'],
+            g.gate('onecue') && ['ONE CUE BEST', fmt(B.oneCueBest || 0)], g.gate('chaos') && ['CHAOS BEST', fmt(B.chaosBest || 0)], d.afterhours?.found && ['CLOSING TIME', d.afterhours.cleared ? `SURVIVED ${d.afterhours.cleared}x` : 'NOT YET']])
+          + sec('CAREER', [['RUNS STARTED', fmt(st.runs || 0)], ['RUNS FINISHED', fmt(st.finished || 0)], ['RUNS WON', fmt(st.wins || 0)], ['TABLES CLEARED', fmt(st.tables || 0)], ['BOSSES BEATEN', fmt(st.bosses || 0)], ['BALLS POTTED', fmt(st.pots || 0)], ['BANK SHOTS', fmt(st.banks || 0)], ['SCRATCHES', fmt(st.scratches || 0)], ['GOLDEN BALLS', fmt(st.golds || 0)], ['CONTRACTS COMPLETED', fmt(st.contracts || 0)], ['RIVALS BEATEN', fmt(rivalsBeaten)], ['SYNERGIES FOUND', `${Object.keys(d.synergies || {}).length} / ${SYNERGIES.length}`], ['BEST RUN SCORE', fmt(st.bestScore || 0)], ['BEST SINGLE SHOT', fmt(st.bestShot || 0)]])
+          + sec('SCRATCH CLASSIC', [['MATCHES PLAYED', C.played || 0], ['MATCHES WON', C.won || 0], ['BEST WIN STREAK', C.bestStreak || 0], ['BREAK AND RUNS', C.breakRuns || 0], ['TOURNAMENTS WON', C.tourneys || 0]]);
+        const riv = RIVALS.filter(r => d.rivals?.[r.id]);
+        if (riv.length) grid.insertAdjacentHTML('beforeend', sec('RIVALS', riv.map(r => { const x = d.rivals[r.id]; return [`<span style="color:${r.color}">${r.name}</span>`, `${x.wins || 0} W · ${x.losses || 0} L${x.nemesis ? ' · <span style="color:var(--red)">NEMESIS</span>' : ''}`]; })));
+      } else if (name === 'HISTORY') {
+        grid.style.display = 'block';
+        const list = d.runHistory || [];
+        hint.textContent = list.length ? 'YOUR LAST 10 RUNS · CLICK ONE FOR THE BUILD' : '';
+        if (!list.length) grid.innerHTML = '<div class="hint" style="text-align:center">NO FINISHED RUNS YET.</div>';
+        for (const r of list) {
+          const x = this.historyRow(r);
+          const row = h('div', 'hist-row', `<div class="hg grade-${(r.grade || 'D').replace('+', 'p')}">${r.grade}</div><div><div class="hb">${r.build || x.mode}</div><div class="hm">${x.date} · ${x.mode} · ${x.res}</div></div><div class="hs">${fmt(r.score)}</div><div class="hm">${(r.relics || []).length} RELICS</div>`);
+          row.onclick = () => { g.audio.ui('select'); this.showBuild(r); };
+          grid.appendChild(row);
+        }
       }
     };
     render();
@@ -555,6 +665,7 @@ export class UI {
         { k: 'shake', name: 'CAMERA SHAKE', slider: true },
         opt('flash', 'SCREEN FLASH', ['full', 'reduced', 'off'], ['FULL', 'REDUCED', 'OFF']),
         opt('heat', 'HEAT SYSTEM', [true, false], ['ON', 'OFF'], 'THE GAME RAMPS UP WHEN YOU DOMINATE'),
+        opt('commentary', 'COMMENTARY', [true, false], ['ON', 'OFF'], 'A FEW WORDS ON YOUR BEST AND WORST SHOTS'),
         { k: 'tips', name: 'TUTORIAL TIPS', tips: true },
       ],
       GRAPHICS: [
@@ -713,10 +824,10 @@ export class UI {
     const el = h('div', 'screen pause-bg');
     el.innerHTML = `<div class="title-bar chrome" style="font-size:calc(var(--px)*20)">PAUSE</div><div class="title-jp">一時停止</div><div class="menu"></div>`;
     const menu = el.querySelector('.menu');
-    const canSwitch = this.g.canSuspend();
+    const canSwitch = this.g.canSuspend() && this.g.run?.mode !== 'rajis';
     const labels = ['RESUME', 'SETTINGS', 'ABANDON RUN', 'PLAY NORMAL 8-BALL', 'QUIT TO MENU'];
     const items = labels.map((t, i) => {
-      const sub = i === 3 ? (canSwitch ? 'YOUR RUN WAITS HERE' : 'FINISH THE SHOT FIRST') : i === 4 ? 'YOUR RUN IS SAVED AT THE LAST STOP' : '';
+      const sub = i === 3 ? (this.g.run?.mode === 'rajis' ? 'NOT FROM HERE' : canSwitch ? 'YOUR RUN WAITS HERE' : 'FINISH THE SHOT FIRST') : i === 4 ? 'YOUR RUN IS SAVED AT THE LAST STOP' : '';
       const m = h('div', 'mi shadow' + (i === 3 ? ' gold' : '') + (i === 3 && !canSwitch ? ' disabled' : ''), sub ? `${t}<span class="sub">${sub}</span>` : t);
       menu.appendChild(m); return m;
     });
@@ -811,7 +922,7 @@ export class UI {
   updateHUD(force = false) {
     const g = this.g, run = g.run, e = g.enc;
     if (!run) return;
-    const atTable = e && ['intro', 'aim', 'charge', 'shooting', 'sim', 'place', 'house', 'houseWait', 'result'].includes(g.state);
+    const atTable = e && ['intro', 'aim', 'charge', 'shooting', 'sim', 'place', 'house', 'houseWait', 'result', 'enemy'].includes(g.state);
     this.hud.querySelector('.hud-tl').style.visibility = atTable ? 'visible' : 'hidden';
     this.hud.querySelector('.hud-meters').style.visibility = atTable ? 'visible' : 'hidden';
     if (!this.h.heat.querySelector('.hf').firstChild) this.h.heat.querySelector('.hf').innerHTML = glyphHTML('flame');
@@ -823,10 +934,10 @@ export class UI {
       const shotsLeft = Math.max(0, e.shots);
       const S = g.shot;
       const tent = S && !S.house ? (def.progress ? def.progress(g, S, e) : S.counted) : 0;
-      const sig = [def.id, e.progress, e.goal, shotsLeft, tent, e.ghostCharges, g.ghostArmed, g.chaosRule?.id, e.chBroken, e.shotsTaken, e.stakeBroken, e.phase].join('|');
+      const sig = [def.id, e.progress, e.goal, shotsLeft, tent, e.ghostCharges, g.ghostArmed, g.chaosRule?.id, e.chBroken, e.shotsTaken, e.stakeBroken, e.phase, e.rivalScore, e.book?.text, e.book?.accepted, e.seqNext, e.lastGame, e.coreTime, run.hearts, run.tstate?.left].join('|');
       if (force || sig !== this.sig.obj) {
         this.sig.obj = sig;
-        const tag = def.boss ? `<span class="obj-tag boss">BOSS${e.phase > 1 ? ' · ' + ROMAN[e.phase] : ''}</span>` : e.kind === 'elite' ? '<span class="obj-tag elite">ELITE</span>' : e.stake ? '<span class="obj-tag stakes">HIGH STAKES</span>' : '';
+        const tag = def.boss ? `<span class="obj-tag boss">${e.remix ? 'REMIX' : 'BOSS'}${e.phase > 1 ? ' · ' + ROMAN[Math.min(3, e.phase)] : ''}</span>` : e.kind === 'elite' ? '<span class="obj-tag elite">ELITE</span>' : e.stake ? '<span class="obj-tag stakes">HIGH STAKES</span>' : e.kind === 'highroller' ? `<span class="obj-tag elite">HIGH ROLLER · ${e.hr}</span>` : e.rivalDef ? `<span class="obj-tag" style="background:${e.rivalDef.color}">${e.nemesis ? 'NEMESIS' : 'RIVAL'}</span>` : e.kind === 'trickshot' ? '<span class="obj-tag elite">TRICK</span>' : '';
         let pips = '';
         if (def.boss) {
           const hp = Math.max(0, (e.goal - e.progress) / e.goal);
@@ -835,7 +946,9 @@ export class UI {
           pips = '<div class="pips">' + Array.from({ length: e.goal }, (_, i) => `<div class="pip${i < e.progress ? ' on' : i < e.progress + tent ? ' tent' : ''}"></div>`).join('') + '</div>';
         }
         let shots = '';
-        if (def.id === 'blitz') shots = `<div class="timer">${Math.ceil(e.timer)}</div>`;
+        if (run.oneCue && def.id !== 'blitz' && e.kind !== 'trickshot') shots = `<div class="shots"><span class="n">∞</span><span>SHOTS · EVERY MISS COSTS A LIFE</span></div>`;
+        else if (e.kind === 'trickshot') shots = `<div class="shots${shotsLeft <= 1 ? ' low' : ''}"><span class="n">${shotsLeft}</span><span>ATTEMPTS LEFT</span></div>`;
+        else if (def.id === 'blitz') shots = `<div class="timer">${Math.ceil(e.timer)}</div>`;
         else if (def.id === 'clock') shots = `<div class="timer clock">${Math.ceil(e.clock)}</div><div class="shots${shotsLeft <= 2 ? ' low' : ''}"><span class="n">${shotsLeft}</span><span>SHOTS</span></div>`;
         else {
           const cues = Array.from({ length: Math.min(14, Math.max(e.shotsMax, shotsLeft)) }, (_, i) => `<i class="${i < shotsLeft ? '' : 'used'}"></i>`).join('');
@@ -852,8 +965,11 @@ export class UI {
           bet = `<div class="obj-bet ${e.chBroken ? 'broken' : ''}">${glyphHTML(e.chBroken ? 'cross' : 'dice')} ${e.chBroken ? 'BET LOST' : 'BET'}: ${txt}</div>`;
         }
         if (e.stake) bet += `<div class="obj-bet ${e.stakeBroken ? 'broken' : ''}">${glyphHTML(e.stakeBroken ? 'cross' : 'warn')} ${e.stakeBroken ? 'STAKE BROKEN' : 'STAKE'}: ${e.stake.name}</div>`;
-        const name = e.anomaly ? e.anomaly.name : nm;
-        this.h.obj.innerHTML = `<div class="obj-name chrome" style="${def.boss ? 'font-size:calc(var(--px)*7)' : ''}">${name}</div>${tag}<div class="obj-text">${def.objective(e)}</div>${mod}${anom}${mods}${bet}${pips}${shots}${ghost}`;
+        const name = e.anomaly ? e.anomaly.name : run.mode === 'rajis' && MISSIONS[def.id] ? MISSIONS[def.id] : e.puzzle ? e.puzzle.name : nm;
+        const book = e.book ? `<div class="bookie">${glyphHTML('dice')} THE BOOKIE: ${e.book.text} · +${e.book.win} / -${e.book.lose} ${e.book.accepted ? `<span class="bk-btn on">${e.book.forced ? 'FORCED' : 'TAKEN'}</span>` : '<span class="bk-btn ia">[B] TAKE IT</span>'}</div>` : '';
+        this.h.obj.innerHTML = this.L(`<div class="obj-name chrome" style="${def.boss ? 'font-size:calc(var(--px)*7)' : ''}">${name}</div>${tag}<div class="obj-text">${def.objective(e)}</div>${mod}${anom}${mods}${bet}${book}${pips}${shots}${ghost}`) + this.rivalPanel(e);
+        const bk = this.h.obj.querySelector('.bk-btn.ia');
+        if (bk) bk.onclick = (ev) => { ev.stopPropagation(); g.bookieAccept(); };
       }
       if (def.id === 'blitz') {
         const t = this.h.obj.querySelector('.timer');
@@ -883,16 +999,24 @@ export class UI {
     if (force || fs !== this.sig.floor) {
       this.sig.floor = fs;
       const mode = run.mode === 'daily' ? 'DAILY · ' : run.endless ? 'ENDLESS · ' : run.breakLv ? `BREAK ${run.breakLv} · ` : '';
-      this.h.floor.textContent = `${mode}FLOOR ${run.floor} · ${floorName(run.floor)}`;
+      this.h.floor.textContent = run.mode === 'rajis' ? `OPERATION ${run.op} · ${LOCATIONS[run.nodes[run.node]?.loc]?.name || 'COMMAND CENTER'}` : run.after ? '03:77 · AFTERHOURS' : `${mode}FLOOR ${run.floor} · ${floorName(run.floor, run)}`;
       this.h.nodes.innerHTML = run.nodes.map((n, i) => `<i class="${i < run.node ? 'done' : i === run.node ? 'cur' : ''} ${n.type === 'boss' ? 'boss' : ''}"></i>`).join('');
     }
+    // the club's mood and your contract, quietly, under the road
+    const st = g.activeState?.();
+    const extra = `${st ? `${st.id}:${run.tstate.left}` : ''}|${run.contract ? `${run.contract.id}:${run.contract.n}` : ''}|${run.over?.id || ''}`;
+    if (force || extra !== this.sig.extra) {
+      this.sig.extra = extra;
+      if (!this.h.extra) { this.h.extra = h('div', 'hud-extra'); this.hud.querySelector('.hud-tr').appendChild(this.h.extra); }
+      this.h.extra.innerHTML = (st ? `<div class="state-badge" style="--sc:${st.color}">${st.name} <b>· ${run.tstate.left} TABLE${run.tstate.left === 1 ? '' : 'S'}</b></div>` : '') + this.contractLine();
+    }
     // relics
-    const rs = run.relics.map(r => r.id).join(',') + '|' + JSON.stringify(run.relicLv || {});
+    const rs = run.relics.map(r => r.id).join(',') + '|' + JSON.stringify(run.relicLv || {}) + '|' + Object.keys(e?.disabled || {}).filter(k => e.disabled[k]).join(',') + '|' + (run.over?.id || '');
     if (force && rs !== this.sig.relics || rs !== this.sig.relics) {
       const grew = this.sig.relics !== undefined && rs.length > this.sig.relics.length;
       this.sig.relics = rs;
       this.h.relics.innerHTML = '';
-      this.h.relicCount.textContent = run.relics.length ? `RELICS ${run.relics.length}/${MAX_RELICS}` : '';
+      this.h.relicCount.textContent = run.relics.length ? this.L(`RELICS ${run.relics.length}/${g.maxRelics()}`) : '';
       const counts = {};
       for (const r of run.relics) counts[r.id] = (counts[r.id] || 0) + 1;
       const shown = new Set();
@@ -907,6 +1031,8 @@ export class UI {
         if (grew && i === run.relics.length - 1) el.classList.add('pulse');
         this.tooltip(el, () => { const upg = g.relicUpgraded(r.id); return `<div class="t" style="color:${RARITY[r.rarity].color}">${r.name}${upg ? '+' : ''}</div><div class="r" style="color:${RARITY[r.rarity].color}">${RARITY[r.rarity].name}${upg ? ' · UPGRADED' : ''}</div>${r.desc}${upg ? `<br><span style="color:var(--gold)">+ ${r.up}</span>` : ''}${r.tags?.length ? `<div class="rtags">${this.relicTags(r)}</div>` : ''}`; });
         if (g.relicUpgraded(r.id)) el.appendChild(h('div', 'plus', '+'));
+        if (e?.disabled?.[r.id]) { el.classList.add('lent'); el.appendChild(h('div', 'lent-k', 'LENT')); }
+        if (run.over?.id === r.id) { el.classList.add('over'); el.appendChild(h('div', 'over-k', 'OC')); }
         this.h.relics.appendChild(el);
       });
     }
@@ -1004,10 +1130,12 @@ export class UI {
       if (p.t >= p.life) { p.el.remove(); this.worldPops.splice(i, 1); }
     }
     this.updateTutorial(dt);
+    this.updateLabels();
   }
 
   // ---------------------------------------------------------- popups
   popup(text, { color = '#fff', scale = 1 } = {}) {
+    text = this.L(text);
     const el = h('div', 'pop');
     const size = 11 * scale;
     el.innerHTML = `<span style="font-size:calc(var(--px)*${size});color:${color};-webkit-text-stroke:calc(var(--px)*0.9) #000;text-shadow:calc(var(--px)*2) calc(var(--px)*2) 0 #000,0 0 calc(var(--px)*8) ${color}">${text}</span>`;
@@ -1034,7 +1162,7 @@ export class UI {
   }
 
   worldPop(text, pos, color = '#fff', scale = 1) {
-    const el = h('div', 'wpop', text);
+    const el = h('div', 'wpop', this.L(text));
     el.style.color = color;
     this.pops.appendChild(el);
     this.worldPops.push({ el, pos: pos.clone(), t: 0, life: 1.0, scale });
@@ -1055,7 +1183,7 @@ export class UI {
     t.style.opacity = 1;
     lines.forEach(([k, v], i) => {
       setTimeout(() => {
-        const l = h('div', 'line' + (v < 0 ? ' neg' : ''), `<span>${k}</span><span class="v">${v > 0 ? '+' : ''}${fmt(v)}</span>`);
+        const l = h('div', 'line' + (v < 0 ? ' neg' : ''), `<span>${this.L(k)}</span><span class="v">${v > 0 ? '+' : ''}${fmt(v)}</span>`);
         t.insertBefore(l, t.querySelector('.total'));
         this.g.audio.tone(900 + i * 90, { type: 'square', dur: 0.04, vol: 0.04, filter: 3000 });
       }, i * 90);
@@ -1078,6 +1206,7 @@ export class UI {
   }
 
   toast(title, color = '#fff', kind = '') {
+    title = this.L(title); kind = this.L(kind);
     const el = h('div', 'toast panel', `${kind ? `<div class="k">${kind}</div>` : ''}<div class="t" style="color:${color}">${title}</div>`);
     this.toasts.appendChild(el);
     setTimeout(() => el.remove(), 3700);
@@ -1176,7 +1305,9 @@ export class UI {
     const el = h('div', 'screen dim');
     const labels = { table: 'TABLE', elite: 'ELITE', shop: 'SHOP', event: '?', boss: 'BOSS', mystery: '??', backroom: 'REST' };
     const lab = (nd) => nd.type === 'fork' ? nd.options.map(o => labels[o]).join('/') : labels[nd.type];
-    const note = n > 1 ? `${glyphHTML('heart')} +1 HEART RESTORED` : run.rookie ? `${glyphHTML('heart')} ROOKIE LUCK: +1 HEART FOR YOUR FIRST RUNS` : run.mode === 'daily' ? `${glyphHTML('star')} DAILY SCRATCH · ${run.daily} · THE SAME ROAD FOR EVERYONE TODAY` : run.breakLv ? `${glyphHTML('flame')} BREAK ${run.breakLv}` : '';
+    const MODE_NOTE = { bossrush: 'BOSS RUSH · EVERY BOSS, BACK TO BACK', onecue: 'ONE CUE · EVERY MISS COSTS A LIFE', chaos: 'CHAOS · NOTHING IS STABLE' };
+    const hand = run.hand?.length ? ` · HANDICAPS x${(run.rewardMul || 1).toFixed(2)}` : '';
+    const note = n > 1 ? `${glyphHTML('heart')} +1 HEART RESTORED` : run.rookie ? `${glyphHTML('heart')} ROOKIE LUCK: +1 HEART FOR YOUR FIRST RUNS` : run.mode === 'daily' ? `${glyphHTML('star')} DAILY SCRATCH · ${run.daily} · THE SAME ROAD FOR EVERYONE TODAY` : MODE_NOTE[run.mode] ? `${glyphHTML('star')} ${MODE_NOTE[run.mode]}` : run.breakLv ? `${glyphHTML('flame')} BREAK ${run.breakLv}${hand}` : hand ? `${glyphHTML('flame')}${hand.slice(2)}` : '';
     el.innerHTML = `<div class="floor-card"><div class="n">FLOOR ${n}${run.endless ? '' : ' / 3'}${run.endless ? ' · ENDLESS' : ''}</div>${note ? `<div style="color:${n > 1 || run.rookie ? 'var(--red)' : 'var(--gold)'};font-size:calc(var(--px)*4);margin-top:calc(var(--px)*3)">${note}</div>` : ''}<div class="t chrome">${name}</div><div class="jp">${jp}</div>
       <div class="floor-map">${run.nodes.map(nd => `<span class="${nd.type === 'boss' ? 'boss' : nd.type === 'fork' ? 'fork' : ''}">${lab(nd)}</span>`).join('<span style="background:none;box-shadow:none;border:none;padding:0">·</span>')}</div>
       <div class="hint" style="margin-top:calc(var(--px)*12)">CLICK TO CONTINUE</div></div>`;
@@ -1199,26 +1330,38 @@ export class UI {
     const run = g.run;
     const el = h('div', 'screen dim');
     const node = run.nodes[run.node];
-    const title = node.type === 'elite' ? 'ELITE TABLE' : 'CHOOSE YOUR TABLE';
-    const jp = node.type === 'elite' ? '精鋭' : '台を選べ';
-    el.innerHTML = `<div class="title-bar chrome">${title}</div><div class="title-jp">${jp}</div><div class="row cards"></div><div class="hint">FLOOR ${run.floor} · STOP ${run.node + 1} / ${run.nodes.length}${run.heat ? ` · HEAT ${ROMAN[run.heat]}` : ''}</div>`;
+    const rj = run.mode === 'rajis';
+    const title = rj ? 'CHOOSE YOUR MISSION' : node.type === 'elite' ? 'ELITE TABLE' : 'CHOOSE YOUR TABLE';
+    const jp = rj ? '任務を選べ' : node.type === 'elite' ? '精鋭' : '台を選べ';
+    const st = g.activeState?.();
+    const where = rj ? `OPERATION ${run.op} · ${LOCATIONS[node.loc]?.name || ''}` : run.after ? '03:77 · AFTERHOURS' : `FLOOR ${run.floor}`;
+    el.innerHTML = `<div class="title-bar chrome">${title}</div><div class="title-jp">${jp}</div><div class="row cards"></div><div class="hint">${where} · STOP ${run.node + 1} / ${run.nodes.length}${run.heat ? ` · ${this.L('HEAT')} ${ROMAN[run.heat]}` : ''}${st ? ` · <span style="color:${st.color}">${st.name} · ${run.tstate.left} LEFT</span>` : ''}</div>`;
     const row = el.querySelector('.row');
     const cards = choices.map(c => {
       const e = c.enc;
-      const cls = c.anomaly ? ' anomaly' : c.kind === 'elite' ? ' legendary' : c.stake ? ' stakes' : '';
+      const rv = e.rivalDef;
+      const cls = c.anomaly ? ' anomaly' : c.kind === 'elite' ? ' legendary' : c.stake ? ' stakes' : c.kind === 'highroller' ? ' roller' : rv ? ' rivalc' : c.kind === 'trickshot' ? ' trickc' : '';
       const card = h('div', 'card panel table-card' + cls);
-      const shots = e.def.id === 'blitz' ? `${e.p.time}s` : `${e.shots}`;
-      const tag = c.anomaly ? `${glyphHTML('anomaly')} ${c.anomaly.secret ? '???' : 'ANOMALY'}` : c.kind === 'elite' ? `${glyphHTML('star')} ${c.heatElite ? 'HEAT ELITE' : 'ELITE'}` : c.stake ? `${glyphHTML('dice')} HIGH STAKES` : e.def.tag;
+      if (rv) card.style.setProperty('--rc', rv.color);
+      const shots = e.def.id === 'blitz' ? `${e.p.time}s` : run.oneCue && c.kind !== 'trickshot' ? '∞' : `${e.shots}`;
+      const tag = c.anomaly ? `${glyphHTML('anomaly')} ${c.anomaly.secret ? '???' : 'ANOMALY'}` : c.kind === 'elite' ? `${glyphHTML('star')} ${c.heatElite ? 'HEAT ELITE' : 'ELITE'}` : c.stake ? `${glyphHTML('dice')} HIGH STAKES`
+        : c.kind === 'highroller' ? `${glyphHTML('roller')} HIGH ROLLER` : rv ? `${glyphHTML('rival')} ${e.nemesis ? 'NEMESIS' : 'RIVAL'}` : c.kind === 'trickshot' ? `${glyphHTML('puzzle')} TRICK TABLE` : rj ? `MISSION · ${LOCATIONS[c.loc]?.name || ''}` : e.def.tag;
       const stake = c.stake ? `<div class="stake">${glyphHTML('warn')} ${c.stake.name}<span>${stakeText(c.stake, e)}<br>BREAK IT AND THE TABLE IS LOST.</span></div>` : '';
       const mods = (c.mods || []).map(m => `<div class="mod">${glyphHTML('diamond')} ${m.name}<span>${m.desc}</span></div>`).join('');
-      card.innerHTML = `<div class="rr" style="color:${c.anomaly ? '#c08aff' : c.kind === 'elite' ? 'var(--gold)' : c.stake ? 'var(--red)' : 'var(--cyan)'}">${tag}</div>
-        <div class="big chrome">${c.anomaly ? c.anomaly.name : e.def.name}</div>
-        <div class="ds">${c.anomaly ? c.anomaly.desc : e.def.blurb}</div>
-        <div class="tagline">${c.anomaly ? e.def.name + ' — ' : ''}${e.def.objective({ ...e, progress: 0 })}</div>
+      const bigName = c.anomaly ? c.anomaly.name : rv ? rv.name : c.kind === 'trickshot' ? e.puzzle.name : rj ? c.mission : e.def.name;
+      const desc = c.anomaly ? c.anomaly.desc : rv ? rv.style : c.kind === 'trickshot' ? e.def.blurb : c.kind === 'highroller' ? 'A harder table. Bet your own chips on it. Win and they come back doubled.' : e.def.blurb;
+      const reward = c.anomaly ? 'LEGENDARY ODDS' : c.stake || c.kind === 'highroller' || c.kind === 'trickshot' ? 'RARE+ RELIC' : rv ? (e.nemesis ? 'LEGENDARY ODDS' : 'RARE RELIC') : c.kind === 'elite' ? 'RARE RELIC' : 'RELIC';
+      const nemesis = rv && e.nemesis ? `<div class="taunt" style="color:var(--red)">${rv.name.replace('THE ', '')} REMEMBERS YOU.</div>` : rv ? `<div class="taunt">${rv.taunt}</div>` : '';
+      card.innerHTML = this.L(`<div class="rr" style="color:${c.anomaly ? '#c08aff' : c.kind === 'elite' || c.kind === 'highroller' ? 'var(--gold)' : c.stake ? 'var(--red)' : rv ? rv.color : 'var(--cyan)'}">${tag}</div>
+        <div class="big chrome">${bigName}</div>
+        <div class="ds">${desc}</div>${nemesis}
+        <div class="tagline">${c.anomaly || rv || c.kind === 'trickshot' ? e.def.name + ' — ' : ''}${e.def.objective({ ...e, progress: 0 })}</div>
         ${stake}${mods}
-        <div class="kv"><span>${e.def.id === 'blitz' ? 'TIME' : 'SHOTS'}</span><b>${shots}</b></div>
-        <div class="kv"><span>PURSE</span><b style="color:var(--gold)">${e.reward} CHIPS</b></div>
-        <div class="kv"><span>REWARD</span><b>${c.anomaly ? 'LEGENDARY ODDS' : c.stake ? 'RARE+ RELIC' : c.kind === 'elite' ? 'RARE RELIC' : 'RELIC'}</b></div>`;
+        <div class="kv"><span>${e.def.id === 'blitz' ? 'TIME' : c.kind === 'trickshot' ? 'ATTEMPTS' : 'SHOTS'}</span><b>${shots}</b></div>
+        <div class="kv"><span>PURSE</span><b style="color:var(--gold)">${c.kind === 'highroller' ? `${e.reward} + YOUR BET x2` : `${e.reward} CHIPS`}</b></div>
+        <div class="kv"><span>REWARD</span><b>${reward}</b></div>
+        ${st && !e.def.boss && c.kind !== 'trickshot' ? `<div class="state-line" style="color:${st.color}">${st.name}${st.reward > 1 ? ` · PURSE x${st.reward}` : st.chipsMul ? ` · CHIPS x${st.chipsMul}` : ''}</div>` : ''}${c.kind === 'trickshot' ? '<div class="state-line" style="color:var(--green)">NO HEART AT RISK</div>' : ''}`);
+      if (rv) { const ic = relicIcon(rv.icon, rv.color); ic.classList.add('rival-ico'); card.insertBefore(ic, card.children[1]); }
       row.appendChild(card);
       return card;
     });
@@ -1226,6 +1369,9 @@ export class UI {
     const entry = this.open(el, { keys });
     if (choices.some(c => c.stake)) this.showTip('stakes');
     if (choices.some(c => c.anomaly)) this.showTip('anomaly');
+    if (choices.some(c => c.enc.rivalDef)) this.showTip('rival');
+    if (choices.some(c => c.kind === 'highroller')) this.showTip('roller');
+    if (choices.some(c => c.kind === 'trickshot')) this.showTip('trick');
   }
 
   // CHOOSE YOUR PATH: a fork in the road
@@ -1335,7 +1481,7 @@ export class UI {
   }
 
   relicName(r) { return r.name + (this.g.relicUpgraded?.(r.id) ? '+' : ''); }
-  relicTags(r) { return (r.tags || []).map(t => `<span class="rtag" style="color:${TAG_COLORS[t]};border-color:${TAG_COLORS[t]}">${t}</span>`).join(''); }
+  relicTags(r) { return (r.tags || []).map(t => `<span class="rtag" style="color:${TAG_COLORS[t]};border-color:${TAG_COLORS[t]}">${t}</span>`).join('') + (r.risk ? '<span class="rtag risk">RISK</span>' : ''); }
 
   bossPhase(def, n, text) {
     const el = h('div', 'phase-banner');
@@ -1374,11 +1520,19 @@ export class UI {
     const idx = run.nodes.slice(0, run.node + 1).filter(n => ['table', 'elite', 'boss'].includes(n.type)).length;
     const el = h('div', 'screen');
     const extra = [
+      e.rivalDef ? `<span style="color:${e.rivalDef.color}">${e.nemesis ? `${e.rivalDef.name} REMEMBERS YOU.` : `${e.rivalDef.name} · ${e.rivalDef.taunt}`}</span>` : '',
+      e.hr ? `${glyphHTML('roller')} ${e.hrAll ? 'ALL IN' : 'BET'}: ${e.hr} CHIPS` : '',
+      e.tstate ? `<span style="color:${e.tstate.color}">${e.tstate.name} — ${e.tstate.desc}</span>` : '',
       ...(e.mods || []).map(m => `${glyphHTML('diamond')} ${m.name} — ${m.desc}`),
       e.challenge ? `${glyphHTML('dice')} BET: ${e.challenge.name}` : '',
       e.stake ? `${glyphHTML('warn')} HIGH STAKES: ${e.stake.name} — ${stakeText(e.stake, e)}` : '',
     ].filter(Boolean).map(t => `<div class="m">${t}</div>`).join('');
-    el.innerHTML = `<div class="banner${e.anomaly ? ' anomaly' : ''}"><div class="k">FLOOR ${run.floor} · TABLE ${idx}/${tables}${e.kind === 'elite' ? ' · ELITE' : ''}${e.anomaly ? ' · ANOMALY' : ''}</div><div class="t chrome">${e.anomaly ? e.anomaly.name : e.def.name}</div><div class="o">${e.def.objective(e)} · ${e.def.id === 'blitz' ? e.timer + ' SECONDS' : e.shots + ' SHOTS'}</div>${e.anomaly ? `<div class="m" style="color:#c08aff">${e.anomaly.desc}</div>` : ''}${extra}</div>`;
+    const rj = run.mode === 'rajis';
+    const where = rj ? `OPERATION ${run.op} · ${LOCATIONS[run.nodes[run.node]?.loc]?.name || ''}` : run.after ? '03:77' : `FLOOR ${run.floor}`;
+    const title = e.anomaly ? e.anomaly.name : e.rivalDef ? e.rivalDef.name : e.puzzle ? e.puzzle.name : rj && MISSIONS[e.def.id] ? MISSIONS[e.def.id] : e.def.name;
+    const budget = e.def.id === 'blitz' ? e.timer + ' SECONDS' : e.puzzle ? `${e.shots} ATTEMPTS · NO CLOCK` : run.oneCue ? 'NO SHOT LIMIT' : e.shots + ' SHOTS';
+    el.innerHTML = this.L(`<div class="banner${e.anomaly ? ' anomaly' : ''}"><div class="k">${where} · TABLE ${idx}/${tables}${e.kind === 'elite' ? ' · ELITE' : ''}${e.anomaly ? ' · ANOMALY' : ''}${e.kind === 'highroller' ? ' · HIGH ROLLER' : ''}</div><div class="t chrome">${title}</div><div class="o">${e.def.objective(e)} · ${budget}</div>${e.anomaly ? `<div class="m" style="color:#c08aff">${e.anomaly.desc}</div>` : ''}${extra}</div>`);
+    if (e.rivalDef && e.nemesis) { g.audio.tone(110, { type: 'sawtooth', dur: 1.2, vol: 0.15, filter: 500, verb: 0.6 }); }
     g.audio.tone(220, { type: 'square', dur: 0.1, vol: 0.08, filter: 2000 });
     g.audio.tone(440, { t: g.audio.now + 0.1, type: 'square', dur: 0.2, vol: 0.08, filter: 2000 });
     let done = false;
@@ -1389,8 +1543,9 @@ export class UI {
     };
     const entry = this.open(el, { keys: () => { fin(); return true; }, click: fin });
     el.addEventListener('click', fin);
-    setTimeout(fin, 2400 + (e.mods?.length || 0) * 500 + (e.challenge ? 500 : 0) + (e.anomaly ? 600 : 0));
+    setTimeout(fin, 2400 + (e.mods?.length || 0) * 500 + (e.challenge ? 500 : 0) + (e.anomaly ? 600 : 0) + (e.rivalDef ? 700 : 0) + (e.tstate ? 500 : 0));
     this.updateHUD(true);
+    if (['sequence', 'territory', 'bounty', 'hotpotato', 'lockdown', 'route'].includes(e.def.id)) this.showTip('labels');
   }
 
   // ------------------------------------------------ mastery feedback
@@ -1425,10 +1580,10 @@ export class UI {
     setTimeout(() => el.remove(), 1700);
   }
 
-  bossIntro(def, go) {
+  bossIntro(def, go, e = null) {
     const g = this.g;
     const el = h('div', 'screen letterbox');
-    el.innerHTML = `<div class="boss-warn">${glyphHTML('warn')} WARNING ${glyphHTML('warn')} BOSS TABLE ${glyphHTML('warn')} WARNING ${glyphHTML('warn')}</div><div class="boss-name chrome" style="filter:drop-shadow(0 0 calc(var(--px)*10) ${def.color})">${def.name}</div><div class="boss-jp" style="color:${def.color}">${def.jp}</div><div class="boss-intro shadow"></div><div class="hint">${def.blurb}</div>`;
+    el.innerHTML = `<div class="boss-warn">${glyphHTML('warn')} WARNING ${glyphHTML('warn')} ${e?.remix ? 'REMIX' : 'BOSS TABLE'} ${glyphHTML('warn')} WARNING ${glyphHTML('warn')}</div><div class="boss-name chrome" style="filter:drop-shadow(0 0 calc(var(--px)*10) ${def.color})">${def.name}${e?.remix ? '<span style="display:block;font-size:0.4em;letter-spacing:0.3em">(REMIX)</span>' : ''}</div><div class="boss-jp" style="color:${def.color}">${def.jp}</div><div class="boss-intro shadow"></div><div class="hint">${def.blurb}</div>`;
     g.screenFlash(0x000000, 0.6);
     let done = false;
     const fin = () => {
@@ -1466,10 +1621,10 @@ export class UI {
     el.appendChild(box);
     let entry;
     if (res.won) {
-      box.innerHTML = `<div class="title-bar chrome" style="text-align:center">${g.enc.def.boss ? 'BOSS DEFEATED' : 'TABLE CLEARED'}</div><div class="title-jp" style="text-align:center">勝利</div><div class="result-lines"></div><div class="result-total" style="visibility:hidden"><span>TOTAL</span><span style="display:flex;align-items:center;gap:calc(var(--px)*3)">${CHIP()}<span class="tt">0</span></span></div><div style="text-align:center;margin-top:calc(var(--px)*4);font-size:calc(var(--px)*4);color:var(--dim)">TABLE SCORE ${fmt(res.score)}</div><div style="text-align:center;margin-top:calc(var(--px)*8)"><button class="btn">CONTINUE</button></div>`;
+      box.innerHTML = `<div class="title-bar chrome" style="text-align:center">${this.L(g.enc.def.boss ? 'BOSS DEFEATED' : g.enc.puzzle ? 'SOLVED' : 'TABLE CLEARED')}</div><div class="title-jp" style="text-align:center">勝利</div><div class="result-lines"></div><div class="result-total" style="visibility:hidden"><span>TOTAL</span><span style="display:flex;align-items:center;gap:calc(var(--px)*3)">${CHIP()}<span class="tt">0</span></span></div><div style="text-align:center;margin-top:calc(var(--px)*4);font-size:calc(var(--px)*4);color:var(--dim)">TABLE SCORE ${fmt(res.score)}</div><div style="text-align:center;margin-top:calc(var(--px)*8)"><button class="btn">CONTINUE</button></div>`;
       const lines = box.querySelector('.result-lines');
       res.lines.forEach(([k, v], i) => setTimeout(() => {
-        lines.appendChild(h('div', 'line', `<span>${k}</span><span class="v">+${v} ${CHIP()}</span>`));
+        lines.appendChild(h('div', 'line', `<span>${this.L(k)}</span><span class="v">${v < 0 ? '' : '+'}${v} ${CHIP()}</span>`));
         g.audio.coin(1);
       }, 250 + i * 220));
       setTimeout(() => {
@@ -1479,8 +1634,10 @@ export class UI {
         tt.animate([{ transform: 'scale(1.3)' }, { transform: 'scale(1)' }], { duration: 250, easing: 'steps(4)' });
         g.audio.coin(4);
       }, 350 + res.lines.length * 220);
+    } else if (res.free) {
+      box.innerHTML = `<div class="title-bar chrome" style="text-align:center">${this.L(res.reason)}</div><div class="title-jp" style="text-align:center">惜しい</div><div class="confirm">THE TRICK TABLE WINS THIS TIME.<br><span style="color:var(--dim)">NO HEART LOST · NO PRIZE · THE NIGHT GOES ON</span></div><div style="text-align:center;margin-top:calc(var(--px)*8)"><button class="btn">MOVE ON</button></div>`;
     } else {
-      box.innerHTML = `<div class="title-bar chrome" style="text-align:center;color:var(--red)">${res.reason}</div><div class="title-jp" style="text-align:center">敗北</div><div class="confirm">YOU LOST A HEART.<br><span style="color:var(--dim)">${res.hearts} HEART${res.hearts === 1 ? '' : 'S'} REMAINING · ${res.retry ? 'THE BOSS AWAITS A REMATCH' : 'NO REWARD — THE NIGHT GOES ON'}</span></div><div class="hearts" style="justify-content:center;margin-top:calc(var(--px)*6);display:flex;gap:calc(var(--px)*2)"></div><div style="text-align:center;margin-top:calc(var(--px)*8)"><button class="btn">${res.retry ? 'REMATCH' : 'MOVE ON'}</button></div>`;
+      box.innerHTML = this.L(`<div class="title-bar chrome" style="text-align:center;color:var(--red)">${res.reason}</div><div class="title-jp" style="text-align:center">敗北</div><div class="confirm">YOU LOST A HEART.<br><span style="color:var(--dim)">${res.hearts} HEART${res.hearts === 1 ? '' : 'S'} REMAINING · ${res.retry ? 'THE BOSS AWAITS A REMATCH' : 'NO REWARD — THE NIGHT GOES ON'}</span></div><div class="hearts" style="justify-content:center;margin-top:calc(var(--px)*6);display:flex;gap:calc(var(--px)*2)"></div><div style="text-align:center;margin-top:calc(var(--px)*8)"><button class="btn">${res.retry ? 'REMATCH' : 'MOVE ON'}</button></div>`);
       const hh = box.querySelector('.hearts');
       for (let i = 0; i < g.run.maxHearts; i++) { const c = heartIcon(i < res.hearts); c.style.width = 'calc(var(--px)*14)'; c.style.height = 'calc(var(--px)*12)'; hh.appendChild(c); }
     }
@@ -1498,6 +1655,7 @@ export class UI {
     if (owned) card.insertAdjacentHTML('beforeend', `<div class="nm" style="color:${rar.color}">${r.name}+</div><div class="rr" style="color:var(--gold)">${glyphHTML('star')} UPGRADE ${glyphHTML('star')}</div><div class="ds">${r.up}</div>`);
     else card.insertAdjacentHTML('beforeend', `<div class="nm" style="color:${rar.color}">${r.name}</div><div class="rr" style="color:${rar.color}">${rar.name}</div><div class="ds">${r.desc}</div>`);
     if (r.tags?.length) card.insertAdjacentHTML('beforeend', `<div class="rtags">${this.relicTags(r)}</div>`);
+    if (g.meta.data.favorites?.[r.id]) { const fm = glyph('star'); fm.classList.add('fav-mark'); card.appendChild(fm); }
     return card;
   }
 
@@ -1540,9 +1698,11 @@ export class UI {
   shop(stock, H) {
     const g = this.g;
     const el = h('div', 'screen dim');
-    el.innerHTML = `<div class="shop-head"><div class="title-bar chrome" style="margin:0">THE CHALK SHOP</div><div class="title-jp" style="margin:0">売店</div></div><div class="shopkeeper"></div><div class="shop-grid"></div><div class="shop-foot"><button class="btn small reroll"></button><button class="btn small sell">SELL A RELIC</button><button class="btn gold leave">LEAVE ${glyphHTML('arrowR')}</button></div>`;
+    const rj = g.run?.mode === 'rajis';
+    el.innerHTML = this.L(`<div class="shop-head"><div class="title-bar chrome" style="margin:0">${rj ? 'COMMAND · REQUISITIONS' : 'THE CHALK SHOP'}</div><div class="title-jp" style="margin:0">${rj ? '補給' : '売店'}</div></div><div class="shopkeeper"></div><div class="shop-grid"></div><div class="shop-foot"><button class="btn small reroll"></button><button class="btn small sell">SELL A RELIC</button><button class="btn gold leave">LEAVE ${glyphHTML('arrowR')}</button></div>`);
     const grid = el.querySelector('.shop-grid');
-    this.type(el.querySelector('.shopkeeper'), '"' + SHOPKEEP[Math.floor(Math.random() * SHOPKEEP.length)] + '"', 30, 200);
+    const lines = rj ? QUARTERMASTER : SHOPKEEP;
+    this.type(el.querySelector('.shopkeeper'), '"' + lines[Math.floor(Math.random() * lines.length)] + '"', 30, 200);
     const render = (items) => {
       grid.innerHTML = '';
       items.forEach(it => {
@@ -1559,7 +1719,7 @@ export class UI {
         if (icon) { const ic = relicIcon(icon[0], icon[1]); ic.classList.add('ico'); card.appendChild(ic); }
         else { const pv = cosmeticPreview(it.cos); pv.classList.add('ico'); card.appendChild(pv); }
         const priceTxt = it.price < 0 ? `+${-it.price} ${CHIP()}` : `${CHIP()}${it.price}`;
-        card.insertAdjacentHTML('beforeend', `<div class="nm" style="color:${col}">${name}</div><div class="rr" style="color:${col}">${sub}</div><div class="ds">${desc}</div>${it.type === 'relic' && it.relic.tags?.length ? `<div class="rtags">${this.relicTags(it.relic)}</div>` : ''}<div class="price${it.price < 0 ? ' pays' : ''}">${priceTxt}</div>`);
+        card.insertAdjacentHTML('beforeend', this.L(`<div class="nm" style="color:${col}">${name}</div><div class="rr" style="color:${col}">${sub}</div><div class="ds">${desc}</div>${it.type === 'relic' && it.relic.tags?.length ? `<div class="rtags">${this.relicTags(it.relic)}</div>` : ''}`) + `<div class="price${it.price < 0 ? ' pays' : ''}">${priceTxt}</div>`);
         const refresh = () => card.classList.toggle('cant', g.run.chips < it.price);
         refresh();
         card.onclick = () => {
@@ -1634,7 +1794,7 @@ export class UI {
     const entry = this.open(el, { keys: (c) => { if (stage && (c === 'Enter' || c === 'Space')) { fin(); return true; } return stage ? false : keys(c); } });
   }
 
-  runEnd({ won, run, xp, lvl, grade, newBests = {} }, done) {
+  runEnd({ won, run, xp, lvl, grade, newBests = {}, shot = null }, done) {
     const g = this.g;
     this.closeAll();
     const el = h('div', 'screen dim');
@@ -1644,7 +1804,10 @@ export class UI {
     const time = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
     const nb = (k) => newBests[k] ? '<em>NEW BEST</em>' : '';
     const unlockLine = won && run.mode === 'standard' ? `<div class="run-unlock">${glyphHTML('star')} ${(g.meta.data.breakMax || 0) > (run.breakLv || 0) ? `BREAK ${Math.min(5, (run.breakLv || 0) + 1)} UNLOCKED` : 'CHAMPION'}${!run.breakLv ? ' · ENDLESS UNLOCKED' : ''}</div>` : '';
-    box.innerHTML = `<div class="go-title chrome" style="${won ? '' : 'filter:drop-shadow(0 0 calc(var(--px)*8) #ff3b5c)'}">${won ? 'RUN COMPLETE' : 'GAME OVER'}</div>${unlockLine}
+    const build = buildName(run.relics, run.seed);
+    const headline = run.afterWon ? 'LAST GAME WON' : run.after ? 'CLOSING TIME' : won ? (run.mode === 'bossrush' ? 'RUSH COMPLETE' : 'RUN COMPLETE') : 'GAME OVER';
+    const afterLine = run.after ? `<div class="run-unlock" style="color:#f0e6c8">${run.afterWon ? 'THE OWNER PUTS DOWN HIS CUE. THE LIGHTS COME UP.' : 'THE CLUB CLOSED WITH YOU STILL INSIDE. THE HOUSE STILL FELL.'}</div>` : '';
+    box.innerHTML = `<div class="go-title chrome" style="${won ? '' : 'filter:drop-shadow(0 0 calc(var(--px)*8) #ff3b5c)'}">${headline}</div>${unlockLine}${afterLine}${build ? `<div class="run-build"><small>YOUR BUILD</small>${build}</div>` : ''}
       <div class="title-jp" style="text-align:center">${won ? '完全勝利' : 'ゲームオーバー'}</div>
       <div class="runend-grid">
         <div class="stats">
@@ -1660,11 +1823,14 @@ export class UI {
         </div>
         <div class="grade-box"><div class="gk">GRADE</div><div class="gv chrome grade-${(grade || 'D').replace('+', 'p')}">${grade || 'D'}</div>${newBests.bestGrade ? '<em>NEW BEST</em>' : ''}</div>
       </div>
+      ${this.shotCard(shot)}
       <div class="lvl">LV <span class="lv">${lvl.from}</span> <span style="font-size:calc(var(--px)*4);color:var(--cyan)">+${fmt(xp)} XP</span></div>
       <div class="xpbar"><i style="width:0"></i></div>
       <div class="unlocks"></div>
       <div class="runend-btns"><button class="btn gold again">PLAY AGAIN</button><button class="btn menu-btn">MAIN MENU</button></div>`;
     el.appendChild(box);
+    const rb = box.querySelector('.replay');
+    if (rb) rb.onclick = (ev) => { ev.stopPropagation(); g.audio.ui('select'); this.replayShot(shot, box); };
     const bar = box.querySelector('.xpbar i'), lvEl = box.querySelector('.lv'), un = box.querySelector('.unlocks');
     let level = lvl.from;
     const d = g.meta.data;
@@ -1696,13 +1862,15 @@ export class UI {
     const fin = (again) => {
       if (left) return; left = true;
       g.audio.ui('select'); this.close(entry);
-      this.transition(() => { done(); if (again) { this.closeAll(); g.startRun({ mode: run.mode === 'daily' ? 'standard' : run.mode, breakLv: run.breakLv || 0 }); } });
+      this.transition(() => { done(); if (again) { this.closeAll(); g.startRun({ mode: run.mode === 'daily' ? 'standard' : run.mode, breakLv: run.breakLv || 0, hand: run.hand || [] }); } });
     };
     box.querySelector('.again').onclick = (e) => { e.stopPropagation(); fin(true); };
     box.querySelector('.menu-btn').onclick = (e) => { e.stopPropagation(); fin(false); };
-    const entry = this.open(el, { keys: (c) => { if (c === 'Enter') { fin(true); return true; } if (c === 'Escape') { fin(false); return true; } return false; } });
+    const entry = this.open(el, { keys: (c) => { if (g.replaying) return true; if (c === 'Enter') { fin(true); return true; } if (c === 'Escape') { fin(false); return true; } return false; } });
     if (!won) g.audio.fail();
   }
 
   escape() { }
 }
+
+Object.assign(UI.prototype, AfterUI);
